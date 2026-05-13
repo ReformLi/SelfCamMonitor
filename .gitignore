@@ -1,0 +1,86 @@
+# ==================== 1. Gradle 构建系统 ====================
+.gradle/
+build/
+*/build/
+gradle-app.setting
+
+# ==================== 2. Android Studio / IDE ====================
+# 整个 .idea 目录（包含项目特定配置）
+.idea/
+.claude/
+# IntelliJ 模块文件（每次 Gradle 同步后会自动生成）
+*.iml
+# 特定用户的工作区文件（包含个人设置）
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
+.idea/caches
+.idea/modules.xml
+.idea/navEditor.xml
+.idea/runConfigurations.xml
+# 用户界面的临时缓存
+.navigation/
+# 其他 Android Studio 生成的文件
+captures/
+.externalNativeBuild/
+.cxx/
+
+# ==================== 3. 应用构建输出 ====================
+# 常见打包文件
+*.apk
+*.aab
+*.aar
+*.ap_
+# Dalvik 虚拟机字节码
+*.dex
+# Java/Kotlin 编译后的字节码
+*.class
+# 构建元数据
+output-metadata.json
+
+# ==================== 4. Kotlin 特定文件 ====================
+.kotlin/
+
+# ==================== 5. 本地配置文件 ====================
+local.properties
+
+# ==================== 6. 安全敏感文件 ====================
+# 签名密钥（非常危险，切勿提交！）
+*.jks
+*.keystore
+# Google 服务 API 密钥（如 Firebase 等）
+google-services.json
+
+# ==================== 7. 操作系统生成文件 ====================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+# Linux
+*~
+
+# ==================== 8. 日志和性能分析文件 ====================
+*.log
+*.hprof
+
+# ==================== 9. 版本控制特定文件 ====================
+.vscode/
+*.swp
+*.swo
+
+# ==================== 10. CI/CD 相关文件 ====================
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+# Jenkins
+.jenkins/
