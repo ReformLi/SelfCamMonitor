@@ -26,10 +26,16 @@ class AlertManager {
     }
 
     fun sendMotionAlert() {
-        val url = alertUrl ?: return
+        val url = alertUrl
+        // 新增：检查 URL 是否有效
+        if (url.isNullOrBlank() || !url.startsWith("http://") && !url.startsWith("https://")) {
+            Log.w(TAG, "无效的报警 URL，跳过发送: $url")
+            return
+        }
+
         val now = System.currentTimeMillis()
         if (now - lastAlertTime < quietPeriodMs) {
-            Log.d(TAG, "在静默期，跳过报警")
+            Log.d(TAG, "在静默期，跳过")
             return
         }
         lastAlertTime = now
@@ -47,9 +53,8 @@ class AlertManager {
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "报警请求失败", e)
+                Log.w(TAG, "报警请求失败: ${e.message}")
             }
-
             override fun onResponse(call: Call, response: Response) {
                 Log.d(TAG, "报警已发送，状态码: ${response.code}")
                 response.close()

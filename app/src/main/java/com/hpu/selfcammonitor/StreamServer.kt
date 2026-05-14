@@ -17,11 +17,37 @@ class StreamServer(port: Int = 8080) : NanoHTTPD(port) {
 
     var isMjpegEnabled: Boolean = true   // 新增状态
 
+    var username: String? = null
+    var password: String? = null
+
     fun setMJPEGStreamer(streamer: MJPEGStreamer) {
         this.mjpegStreamer = streamer
     }
 
     override fun serve(session: IHTTPSession?): Response {
+        // 增加 username 和 password 属性验证
+        // 认证检查
+        if (username != null && password != null) {
+            val auth = session?.headers?.get("authorization")
+            if (auth == null || !auth.startsWith("Basic ")) {
+                val res = newFixedLengthResponse(
+                    Response.Status.UNAUTHORIZED, "text/plain", "需要认证"
+                )
+                res.addHeader("WWW-Authenticate", "Basic realm=\"Camera\"")
+                return res
+            }
+            val cred = String(
+                Base64.decode(auth.substring(6), Base64.DEFAULT)
+            ).split(":")
+            if (cred.size != 2 || cred[0] != username || cred[1] != password) {
+                val res = newFixedLengthResponse(
+                    Response.Status.UNAUTHORIZED, "text/plain", "认证失败"
+                )
+                res.addHeader("WWW-Authenticate", "Basic realm=\"Camera\"")
+                return res
+            }
+        }
+
         if (session?.uri == "/video") {
             // 检查推流开关
             if (!isMjpegEnabled) {

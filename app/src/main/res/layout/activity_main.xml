@@ -6,6 +6,15 @@
     android:gravity="center_vertical"
     android:padding="16dp">
 
+    <ImageButton
+        android:id="@+id/btnSettings"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:src="@android:drawable/ic_menu_manage"
+        android:layout_marginBottom="10dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:layout_gravity="end"/>
+
     <TextView
         android:id="@+id/tvIpAddress"
         android:layout_width="match_parent"

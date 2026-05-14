@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -95,6 +96,10 @@ class MainActivity : AppCompatActivity() {
             prefs.edit().putBoolean("mjpeg_enabled", isChecked).apply()
             val intent = Intent("com.hpu.selfcammonitor.RELOAD_CONFIG")
             LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        }
+
+        findViewById<ImageButton>(R.id.btnSettings).setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
 
         switchMotion.setOnCheckedChangeListener { _, isChecked ->

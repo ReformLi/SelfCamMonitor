@@ -81,6 +81,15 @@ class CameraService : LifecycleService() {
     private var recording: Recording? = null
     private var isRecording = false
 
+    private var lastFrameTime = 0L
+    private var minFrameInterval = 0L // 由 fps 计算
+
+    private val prefs by lazy { getSharedPreferences("camera_prefs", MODE_PRIVATE) }
+
+    // 监控时间限制
+    private var monitorStart: String? = null   // 如 "08:00"
+    private var monitorEnd: String? = null     // 如 "20:00"
+
     companion object {
         const val CHANNEL_ID = "camera_service_channel"
         const val NOTIFICATION_ID = 1
@@ -107,15 +116,30 @@ class CameraService : LifecycleService() {
         val prefs = getSharedPreferences("camera_prefs", MODE_PRIVATE)
         mjpegEnabled = prefs.getBoolean("mjpeg_enabled", true)
         motionDetectionEnabled = prefs.getBoolean("motion_detection_enabled", true)
+
+        streamServer.username = prefs.getString("http_user", null)
+        streamServer.password = prefs.getString("http_pass", null)
+
         // 同步给 StreamServer
         streamServer.isMjpegEnabled = mjpegEnabled
+
+        // 读取动作灵敏度   设置灵敏度为 20（更敏感），轻微运动即触发录像；设为 80（较迟钝），需大幅度动作才触发。
+        val sensitivity = prefs.getInt("sensitivity", 50)
+        motionDetector.setSensitivity(sensitivity)
+
+        // 监控时间限制
+        monitorStart = prefs.getString("monitor_start", null)
+        monitorEnd = prefs.getString("monitor_end", null)
+
+        // 报警 URL 和静默期
+        val alertQuiet = prefs.getInt("alert_quiet", 30)
+        val rawUrl = prefs.getString("alert_url", null)
+        alertManager.setAlertUrl(rawUrl?.takeIf { it.isNotBlank() && it.startsWith("http") })
+        alertManager.setQuietPeriod(alertQuiet * 1000L) // 秒转毫秒
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         loadSettings()
-        alertManager.setAlertUrl("http://192.168.1.100:3000/motion")
-        alertManager.setQuietPeriod(30_000L)
-
         super.onStartCommand(intent, flags, startId)
 
         // 在 onStartCommand 中或 onCreate 中
@@ -205,15 +229,35 @@ class CameraService : LifecycleService() {
         cameraProviderFuture.addListener({
             cameraProvider = cameraProviderFuture.get()
 
+            // 读取设置的分辨率
+            val resString = prefs.getString("resolution", "640x480") ?: "640x480"
+            val parts = resString.split("x")
+            val targetWidth = parts.getOrNull(0)?.toIntOrNull() ?: 640
+            val targetHeight = parts.getOrNull(1)?.toIntOrNull() ?: 480
+
             // 1. 图像分析（MJPEG源 + 运动检测）
             val imageAnalysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .setTargetResolution(android.util.Size(640, 480))
+                .setTargetResolution(android.util.Size(targetWidth, targetHeight))
                 .build()
 
             imageAnalysis.setAnalyzer(cameraExecutor, ImageAnalysis.Analyzer { imageProxy ->
+
+
                 try {
-                    Log.d(TAG, "帧已分析，时间: ${System.currentTimeMillis()}")
+                    // 检查是否在允许的监控时间段内
+                    if (!isWithinTimeWindow()) {
+                        imageProxy.close()
+                        return@Analyzer  // 不在时间窗内，直接丢弃帧
+                    }
+                    // 应用帧率限制
+                    val now = System.currentTimeMillis()
+                    if (now - lastFrameTime < minFrameInterval) {
+                        imageProxy.close()   // 丢弃帧
+                        return@Analyzer
+                    }
+                    lastFrameTime = now
+//                    Log.d(TAG, "帧已分析，时间: ${System.currentTimeMillis()}")
                     // 运动检测
                     if (motionDetectionEnabled) {
                         val motion = motionDetector.detectMotion(imageProxy)
@@ -259,6 +303,26 @@ class CameraService : LifecycleService() {
                 stopSelf()
             }
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun isWithinTimeWindow(): Boolean {
+        val start = monitorStart ?: return true  // 为空时无限制，全天
+        val end = monitorEnd ?: return true  // 为空时无限制，全天
+        if (start == end) return true  // 前后时间相等时 无限制，全天
+        val now = java.util.Calendar.getInstance()
+        val currentMinutes = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
+
+        val startParts = start.split(":")
+        val startMinutes = startParts[0].toInt() * 60 + startParts[1].toInt()
+        val endParts = end.split(":")
+        val endMinutes = endParts[0].toInt() * 60 + endParts[1].toInt()
+
+        return if (startMinutes <= endMinutes) {
+            currentMinutes in startMinutes..endMinutes
+        } else {
+            // 跨天情况，如 22:00 - 06:00
+            currentMinutes >= startMinutes || currentMinutes <= endMinutes
+        }
     }
 
     // 放在 CameraService 类内部
