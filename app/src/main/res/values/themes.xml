@@ -19,6 +19,7 @@
         <!-- Status bar -->
         <item name="android:statusBarColor">@color/primary_dark</item>
         <item name="android:windowLightStatusBar">false</item>
+        <item name="android:fitsSystemWindows">true</item>
 
         <!-- Navigation bar -->
         <item name="android:navigationBarColor">@color/primary_dark</item>

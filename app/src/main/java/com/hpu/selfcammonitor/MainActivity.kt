@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.Switch
@@ -61,6 +62,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        // 适配全面屏状态栏
+        setupStatusBarPadding()
 
         // 绑定视图
         tvIpAddress = findViewById(R.id.tvIpAddress)
@@ -243,5 +247,14 @@ class MainActivity : AppCompatActivity() {
         } else 0L
         val sizeMB = totalSize / (1024 * 1024)
         tvStorage.text = "录像存储: ${sizeMB} MB"
+    }
+
+    private fun setupStatusBarPadding() {
+        // 获取状态栏高度并设置padding
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        if (resourceId > 0) {
+            val statusBarHeight = resources.getDimensionPixelSize(resourceId)
+            findViewById<View>(android.R.id.content).setPadding(0, statusBarHeight, 0, 0)
+        }
     }
 }
