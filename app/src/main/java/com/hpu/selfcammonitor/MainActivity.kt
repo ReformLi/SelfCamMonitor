@@ -209,9 +209,31 @@ class MainActivity : AppCompatActivity() {
             tvStatus.text = "服务已停止"
             tvStatus.setTextColor(getColor(android.R.color.holo_red_dark))
         }
+
+        // 按钮状态控制：运行时启动按钮置灰，停止按钮可用；停止时相反
         btnStart.isEnabled = !running
         btnStop.isEnabled = running
+
+        // 设置按钮背景色和文字颜色
+        updateButtonAppearance(running)
+
         updateStorageInfo()
+    }
+
+    private fun updateButtonAppearance(running: Boolean) {
+        if (running) {
+            // 服务运行时：启动按钮置灰，停止按钮正常
+            btnStart.setBackgroundColor(getColor(android.R.color.darker_gray))
+            btnStart.setTextColor(getColor(android.R.color.white))
+            btnStop.setBackgroundColor(getColor(android.R.color.holo_red_dark))
+            btnStop.setTextColor(getColor(android.R.color.white))
+        } else {
+            // 服务停止时：启动按钮正常，停止按钮置灰
+            btnStart.setBackgroundColor(getColor(android.R.color.holo_green_dark))
+            btnStart.setTextColor(getColor(android.R.color.white))
+            btnStop.setBackgroundColor(getColor(android.R.color.darker_gray))
+            btnStop.setTextColor(getColor(android.R.color.white))
+        }
     }
 
     private fun updateStorageInfo() {

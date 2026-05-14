@@ -136,7 +136,7 @@ class MJPEGStreamer {
             try {
                 client.write(frameBytes)
                 client.flush()
-                Log.d(TAG, "Wrote ${frameBytes.size} bytes to client")
+//                Log.d(TAG, "Wrote ${frameBytes.size} bytes to client")
             } catch (e: Exception) {
                 Log.w(TAG, "客户端断开连接，移除")
                 iterator.remove()

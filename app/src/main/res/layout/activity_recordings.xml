@@ -2,97 +2,148 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical"
+    android:background="@color/background_light"
     android:focusableInTouchMode="true">
 
     <!-- 顶部工具栏 -->
-    <LinearLayout
-        android:id="@+id/toolbar"
+    <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingHorizontal="8dp"
-        android:paddingVertical="4dp"
-        android:gravity="center_vertical">
+        android:layout_margin="8dp"
+        app:cardCornerRadius="8dp"
+        app:cardElevation="2dp"
+        xmlns:app="http://schemas.android.com/apk/res-auto">
 
-        <!-- 全选按钮（多选模式显示） -->
-        <Button
-            android:id="@+id/btnSelectAll"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="全选"
-            android:visibility="gone" />
-
-        <!-- 搜索栏容器（搜索模式显示） -->
         <LinearLayout
-            android:id="@+id/searchBar"
-            android:layout_width="0dp"
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:visibility="gone">
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:gravity="center_vertical">
 
-            <EditText
-                android:id="@+id/etSearch"
+            <!-- 文件数量显示（普通模式显示，多选模式隐藏） -->
+            <TextView
+                android:id="@+id/tvFileCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="共 0 个文件"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="8dp" />
+
+            <!-- 全选按钮（多选模式显示，遮盖文件数量） -->
+            <Button
+                android:id="@+id/btnSelectAll"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="全选"
+                android:textSize="14sp"
+                android:visibility="gone"
+                style="@style/Widget.Material3.Button.TextButton" />
+
+            <!-- 搜索栏容器（搜索模式显示） -->
+            <LinearLayout
+                android:id="@+id/searchBar"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:hint="输入文件名关键词"
-                android:singleLine="true"
-                android:imeOptions="actionSearch"
-                android:inputType="text" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:visibility="gone"
+                android:background="@drawable/search_background"
+                android:paddingHorizontal="12dp">
 
-            <ImageButton
-                android:id="@+id/btnClearSearch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:src="@android:drawable/ic_menu_close_clear_cancel"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="清除" />
+                <EditText
+                    android:id="@+id/etSearch"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="5"
+                    android:hint="输入文件名关键词"
+                    android:singleLine="true"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint"
+                    android:background="@null"
+                    android:paddingVertical="8dp" />
 
+                <ImageButton
+                    android:id="@+id/btnClearSearch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:src="@drawable/ic_close"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="清除"
+                    android:padding="4dp" />
+
+                <Button
+                    android:id="@+id/btnSearchConfirm"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="搜索"
+                    android:textSize="14sp"
+                    style="@style/Widget.Material3.Button.TextButton" />
+            </LinearLayout>
+
+            <!-- 占位视图（普通模式用于将右侧按钮推到最右，搜索/多选模式隐藏） -->
+            <View
+                android:id="@+id/spacer"
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <!-- 搜索按钮（普通模式显示） -->
             <Button
-                android:id="@+id/btnSearchConfirm"
+                android:id="@+id/btnSearch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="搜索" />
+                android:text="搜索"
+                android:textSize="14sp"
+                style="@style/Widget.Material3.Button.TextButton" />
+
+            <!-- 取消按钮（多选模式显示） -->
+            <Button
+                android:id="@+id/btnCancelSelect"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="取消"
+                android:textSize="14sp"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:visibility="gone" />
         </LinearLayout>
-
-        <!-- 占位视图（普通模式用于将右侧按钮推到最右，搜索/多选模式隐藏） -->
-        <View
-            android:id="@+id/spacer"
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
-
-        <!-- 搜索按钮（普通模式显示） -->
-        <Button
-            android:id="@+id/btnSearch"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="搜索" />
-
-        <!-- 取消按钮（多选模式显示） -->
-        <Button
-            android:id="@+id/btnCancelSelect"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="取消"
-            android:visibility="gone" />
-    </LinearLayout>
+    </androidx.cardview.widget.CardView>
 
     <!-- 录像列表 -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1"
+        android:padding="8dp" />
 
     <!-- 删除按钮（多选模式显示） -->
-    <Button
-        android:id="@+id/btnDelete"
+    <androidx.cardview.widget.CardView
+        android:id="@+id/deleteButtonCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="删除选中"
-        android:visibility="gone" />
+        android:layout_margin="8dp"
+        android:visibility="gone"
+        app:cardCornerRadius="8dp"
+        app:cardElevation="2dp">
+
+        <Button
+            android:id="@+id/btnDelete"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="删除选中"
+            android:textSize="16sp"
+            android:backgroundTint="@color/status_stopped"
+            android:paddingVertical="12dp" />
+    </androidx.cardview.widget.CardView>
 </LinearLayout>
