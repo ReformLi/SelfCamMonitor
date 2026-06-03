@@ -3,6 +3,10 @@
 build/
 */build/
 gradle-app.setting
+# 或者忽略整个 release 构建输出目录
+**/release/
+#忽略项目中所有 .dm 文件
+*.dm
 
 # ==================== 2. Android Studio / IDE ====================
 # 整个 .idea 目录（包含项目特定配置）

@@ -129,23 +129,50 @@
         android:layout_weight="1"
         android:padding="8dp" />
 
-    <!-- 删除按钮（多选模式显示） -->
-    <androidx.cardview.widget.CardView
-        android:id="@+id/deleteButtonCard"
+    <!-- 底部按钮容器（多选模式显示） -->
+    <LinearLayout
+        android:id="@+id/buttonCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="8dp"
-        android:visibility="gone"
-        app:cardCornerRadius="8dp"
-        app:cardElevation="2dp">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:visibility="gone">
 
-        <Button
-            android:id="@+id/btnDelete"
-            android:layout_width="match_parent"
+        <androidx.cardview.widget.CardView
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="删除选中"
-            android:textSize="16sp"
-            android:backgroundTint="@color/status_stopped"
-            android:paddingVertical="12dp" />
-    </androidx.cardview.widget.CardView>
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="2dp">
+
+            <Button
+                android:id="@+id/btnDelete"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="删除选中"
+                android:textSize="16sp"
+                android:backgroundTint="@color/status_stopped"
+                android:paddingVertical="12dp" />
+        </androidx.cardview.widget.CardView>
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="2dp">
+
+            <Button
+                android:id="@+id/btnExport"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="导出选中"
+                android:textSize="16sp"
+                android:backgroundTint="@color/primary"
+                android:paddingVertical="12dp" />
+        </androidx.cardview.widget.CardView>
+    </LinearLayout>
 </LinearLayout>

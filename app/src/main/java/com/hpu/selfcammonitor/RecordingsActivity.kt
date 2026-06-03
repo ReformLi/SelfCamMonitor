@@ -1,19 +1,34 @@
 package com.hpu.selfcammonitor
 
+import android.app.ProgressDialog
+import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.*
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.documentfile.provider.DocumentFile
+import java.io.FileInputStream
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.activity.result.contract.ActivityResultContracts
 import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.text.SimpleDateFormat
+import java.util.*
 import android.view.MotionEvent
 import kotlin.compareTo
 
@@ -34,13 +49,24 @@ class RecordingsActivity : AppCompatActivity() {
     private lateinit var btnSearch: Button
     private lateinit var btnCancelSelect: Button
     private lateinit var btnDelete: Button
-    private lateinit var deleteButtonCard: androidx.cardview.widget.CardView
+    private lateinit var btnExport: Button
+    private lateinit var buttonCard: LinearLayout
 
     // 数据
     private var allFiles: List<File> = emptyList()
     private var currentFiles: List<File> = emptyList()
     private var isSelectMode = false
     private val selectedFiles = mutableSetOf<File>()
+
+    // SAF文件选择器
+    private val pickDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let { treeUri ->
+            // 获取写入权限
+            contentResolver.takePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            // 开始导出
+            exportSelectedFiles(treeUri)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,7 +88,8 @@ class RecordingsActivity : AppCompatActivity() {
         btnSearch = findViewById(R.id.btnSearch)
         btnCancelSelect = findViewById(R.id.btnCancelSelect)
         btnDelete = findViewById(R.id.btnDelete)
-        deleteButtonCard = findViewById(R.id.deleteButtonCard)
+        btnExport = findViewById(R.id.btnExport)
+        buttonCard = findViewById(R.id.buttonCard)
 
         loadAllFiles()
         updateCurrentFiles(allFiles)
@@ -162,6 +189,12 @@ class RecordingsActivity : AppCompatActivity() {
         btnDelete.setOnClickListener {
             deleteSelectedFiles()
         }
+
+        btnExport.setOnClickListener {
+            if (selectedFiles.isNotEmpty()) {
+                showExportFolderSelector()
+            }
+        }
     }
 
     // ======================= 模式管理 =======================
@@ -224,13 +257,14 @@ class RecordingsActivity : AppCompatActivity() {
         adapter.selectedFiles = selectedFiles
         adapter.notifyDataSetChanged()
         updateDeleteButton() // 更新删除按钮状态
+        updateButtonCardVisibility()
         hideSelectUI()
     }
 
     private fun showSelectUI() {
         btnSelectAll.visibility = View.VISIBLE
         btnCancelSelect.visibility = View.VISIBLE
-        deleteButtonCard.visibility = View.VISIBLE
+        updateButtonCardVisibility() // 显示删除和导出按钮卡片
         btnSearch.visibility = View.GONE
         searchBar.visibility = View.GONE
         spacer.visibility = View.VISIBLE   // 让全选和取消分列两侧
@@ -241,7 +275,7 @@ class RecordingsActivity : AppCompatActivity() {
     private fun hideSelectUI() {
         btnSelectAll.visibility = View.GONE
         btnCancelSelect.visibility = View.GONE
-        deleteButtonCard.visibility = View.GONE
+        updateButtonCardVisibility() // 隐藏删除和导出按钮卡片
         btnSearch.visibility = View.VISIBLE
         spacer.visibility = if (searchBar.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         updateFileCountDisplay() // 更新文件数量显示（显示）
@@ -308,14 +342,132 @@ class RecordingsActivity : AppCompatActivity() {
     private fun updateDeleteButton() {
         val validCount = selectedFiles.size
         btnDelete.isEnabled = validCount > 0
-        btnDelete.text = if (validCount > 0) "删除选中 ($validCount)" else "删除选中"
-        // 确保在选择模式下删除按钮卡片总是可见的
-        if (isSelectMode) {
-            deleteButtonCard.visibility = View.VISIBLE
+        btnDelete.text = "删除选中"
+        updateButtonCardVisibility()
+    }
+
+    private fun updateButtonCardVisibility() {
+        if (isSelectMode && selectedFiles.isNotEmpty()) {
+            buttonCard.visibility = View.VISIBLE
+        } else {
+            buttonCard.visibility = View.GONE
         }
-        // 强制刷新UI
-        btnDelete.invalidate()
-        btnDelete.requestLayout()
+    }
+
+    // 显示导出文件夹选择对话框
+    private fun showExportFolderSelector() {
+        val alertDialog = AlertDialog.Builder(this)
+            .setTitle("选择导出文件夹")
+            .setMessage("选择一个文件夹来导出选中的视频文件，该文件夹将成为一个媒体库目录")
+            .setPositiveButton("选择文件夹") { _, _ ->
+                pickDocumentLauncher.launch(null)
+            }
+            .setNegativeButton("取消", null)
+            .create()
+        alertDialog.show()
+    }
+
+    // 导出选中的视频文件
+    private fun exportSelectedFiles(treeUri: Uri) {
+        if (selectedFiles.isEmpty()) return
+
+        // 显示进度对话框
+        val progress = ProgressDialog(this)
+        progress.setMessage("正在导出 ${selectedFiles.size} 个文件...")
+        progress.setProgressStyle(ProgressDialog.STYLE_SPINNER)
+        progress.setCancelable(false)
+        progress.show()
+
+        // 创建DocumentFile来处理目标目录
+        val rootDocument = DocumentFile.fromTreeUri(this, treeUri)
+
+        // 导出文件
+        var successCount = 0
+        val failedFiles = mutableListOf<String>()
+
+        selectedFiles.forEach { file ->
+            try {
+                // 复制文件到目标目录
+                if (copyFileToDocument(file,treeUri, rootDocument)) {
+                    successCount++
+                }
+            } catch (e: Exception) {
+                failedFiles.add(file.name ?: "未知文件名")
+                android.util.Log.e("Export", "Failed to export ${file.name}: ${e.message}")
+            }
+        }
+
+        // 关闭进度对话框
+        progress.dismiss()
+
+        // 显示结果提示
+        val resultMessage = if (failedFiles.isEmpty()) {
+            "成功导出 $successCount 个文件到系统文件夹"
+        } else {
+            "成功导出 $successCount 个文件，但以下文件导出失败：\n${failedFiles.joinToString("\n")}"
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("导出完成")
+            .setMessage(resultMessage)
+            .setPositiveButton("确定") { _, _ ->
+                // 清空选择并返回录像管理页面
+                exitSelectMode()
+                Toast.makeText(this, "导出成功！", Toast.LENGTH_SHORT).show()
+            }
+            .show()
+    }
+
+    // 复制文件到DocumentFile目录
+    private fun copyFileToDocument(sourceFile: File,treeUri: Uri, rootDocument: DocumentFile?): Boolean {
+        return try {
+            // 创建目标文件
+            val destFile = rootDocument?.createFile("video/mp4", sourceFile.name) ?: return false
+
+            // 打开源文件和目标文件
+            val sourceInputStream = FileInputStream(sourceFile)
+            val destOutputStream = contentResolver.openOutputStream(destFile.uri) ?: return false
+
+            // 复制内容
+            val buffer = ByteArray(8192)
+            var bytesRead: Int
+            while (sourceInputStream.read(buffer).also { bytesRead = it } != -1) {
+                destOutputStream.write(buffer, 0, bytesRead)
+            }
+
+            // 关闭流
+            sourceInputStream.close()
+            destOutputStream.close()
+
+            // 对于API 29+，刷新媒体库
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    // 根据URI判断相对路径
+                    val path = if (treeUri.toString().contains("Android/data") ||
+                                  treeUri.toString().contains("Documents") ||
+                                  treeUri.toString().contains("Download")) {
+                        "Download/"
+                    } else if (treeUri.toString().contains("Pictures")) {
+                        "Pictures/"
+                    } else if (treeUri.toString().contains("DCIM")) {
+                        "DCIM/"
+                    } else {
+                        ""
+                    }
+                    put(MediaStore.Video.Media.RELATIVE_PATH, path)
+                    put(MediaStore.Video.Media.IS_PENDING, 1)
+                }
+                contentResolver.update(destFile.uri, values, null, null)
+                values.clear()
+                values.put(MediaStore.Video.Media.IS_PENDING, 0)
+                contentResolver.update(destFile.uri, values, null, null)
+            }
+
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("Export", "Error copying file: ${e.message}")
+            false
+        }
     }
 
     private fun updateFileCountDisplay() {
