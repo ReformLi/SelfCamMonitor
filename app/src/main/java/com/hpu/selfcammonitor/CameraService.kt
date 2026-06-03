@@ -37,6 +37,9 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.Inet4Address
 import java.net.NetworkInterface
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -305,6 +308,19 @@ class CameraService : LifecycleService() {
         }, ContextCompat.getMainExecutor(this))
     }
 
+    private fun generateMotionFileName(): String {
+        val timestamp = System.currentTimeMillis()
+        val date = Date(timestamp)
+
+        // 紧凑格式：YYMMDDHHmmss（12位） + 毫秒后3位
+        val formatter = SimpleDateFormat("yyMMddHHmmss", Locale.getDefault())
+        val dateTimePart = formatter.format(date)
+        // 获取时间戳最后3位并补零（如 012）
+        val lastThreeDigits = (timestamp % 1000).toString().padStart(3, '0')
+
+        return "motion_${dateTimePart}_${lastThreeDigits}.mp4"
+    }
+
     private fun isWithinTimeWindow(): Boolean {
         val start = monitorStart ?: return true  // 为空时无限制，全天
         val end = monitorEnd ?: return true  // 为空时无限制，全天
@@ -333,7 +349,7 @@ class CameraService : LifecycleService() {
 
     private fun startClipRecording() {
         if (isRecording) return
-        val fileName = "motion_${System.currentTimeMillis()}.mp4"
+        val fileName = generateMotionFileName()
         val file = File(recordDir, fileName)
         val outputOptions = FileOutputOptions.Builder(file).build()
 
