@@ -6,8 +6,7 @@
     android:orientation="vertical"
     android:background="@color/background_light"
     android:focusableInTouchMode="true"
-    android:fitsSystemWindows="true"
-    android:paddingTop="?attr/actionBarSize">
+    android:fitsSystemWindows="true">
 
     <!-- 顶部工具栏 -->
     <androidx.cardview.widget.CardView

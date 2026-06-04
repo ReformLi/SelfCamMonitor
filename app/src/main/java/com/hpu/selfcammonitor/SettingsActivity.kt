@@ -34,9 +34,6 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
-        // 适配全面屏状态栏
-        setupStatusBarPadding()
-
         prefs = getSharedPreferences("camera_prefs", MODE_PRIVATE)
 
         spResolution = findViewById(R.id.spinnerResolution)
@@ -163,14 +160,5 @@ class SettingsActivity : AppCompatActivity() {
         // 发送广播通知服务重新加载
         sendBroadcast(Intent("com.hpu.selfcammonitor.RELOAD_CONFIG"))
         finish()
-    }
-
-    private fun setupStatusBarPadding() {
-        // 获取状态栏高度并设置padding
-        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
-        if (resourceId > 0) {
-            val statusBarHeight = resources.getDimensionPixelSize(resourceId)
-            findViewById<View>(android.R.id.content).setPadding(0, statusBarHeight, 0, 0)
-        }
     }
 }

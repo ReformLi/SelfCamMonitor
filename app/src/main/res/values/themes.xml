@@ -37,6 +37,12 @@
         <item name="strokeWidth">0dp</item>
     </style>
 
+    <!-- res/values/themes.xml -->
+    <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@color/background_light</item>
+        <!-- 或者如果你想要完全透明，可以使用透明颜色 -->
+    </style>
+
     <!-- Button styles -->
     <style name="Widget.SelfCamMonitor.Button" parent="Widget.Material3.Button">
         <item name="cornerRadius">8dp</item>

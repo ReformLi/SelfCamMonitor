@@ -72,9 +72,6 @@ class RecordingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_recordings)
 
-        // 适配全面屏状态栏
-        setupStatusBarPadding()
-
         recyclerView = findViewById(R.id.recyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
 
@@ -509,15 +506,6 @@ class RecordingsActivity : AppCompatActivity() {
             startActivity(intent)
         } catch (e: Exception) {
             startActivity(Intent(Intent.ACTION_VIEW, uri))
-        }
-    }
-
-    private fun setupStatusBarPadding() {
-        // 获取状态栏高度并设置padding
-        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
-        if (resourceId > 0) {
-            val statusBarHeight = resources.getDimensionPixelSize(resourceId)
-            findViewById<View>(android.R.id.content).setPadding(0, statusBarHeight, 0, 0)
         }
     }
 }

@@ -7,6 +7,8 @@ gradle-app.setting
 **/release/
 #忽略项目中所有 .dm 文件
 *.dm
+# 忽略 release 目录下的所有构建产物
+app/release/
 
 # ==================== 2. Android Studio / IDE ====================
 # 整个 .idea 目录（包含项目特定配置）
