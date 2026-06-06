@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 运动录像时长选项（显示文本） -->
+    <string-array name="motion_duration_labels">
+        <item>10秒</item>
+        <item>30秒</item>
+        <item>1分钟</item>
+        <item>3分钟</item>
+        <item>5分钟</item>
+    </string-array>
+
+    <!-- 运动录像时长对应的实际秒数（隐藏值，代码中使用） -->
+    <string-array name="motion_duration_values" translatable="false">
+        <item>10</item>
+        <item>30</item>
+        <item>60</item>
+        <item>180</item>
+        <item>300</item>
+    </string-array>
+
+    <!-- 连续录像分段时长选项（显示文本） -->
+    <string-array name="continuous_duration_labels">
+        <item>1分钟</item>
+        <item>5分钟</item>
+        <item>10分钟</item>
+        <item>30分钟</item>
+        <item>1小时</item>
+    </string-array>
+
+    <!-- 连续录像分段时长对应的实际秒数（隐藏值） -->
+    <string-array name="continuous_duration_values" translatable="false">
+        <item>60</item>
+        <item>300</item>
+        <item>600</item>
+        <item>1800</item>
+        <item>3600</item>
+    </string-array>
+</resources>

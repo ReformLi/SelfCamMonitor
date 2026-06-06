@@ -14,7 +14,7 @@
         android:padding="16dp"
         android:gravity="center_vertical">
 
-        <!-- 多选 CheckBox，默认隐藏，多选模式时才显示 -->
+        <!-- 多选 CheckBox -->
         <CheckBox
             android:id="@+id/checkbox"
             android:layout_width="wrap_content"
@@ -36,6 +36,7 @@
             android:layout_weight="1"
             android:orientation="vertical">
 
+            <!-- 文件名 -->
             <TextView
                 android:id="@android:id/text1"
                 android:layout_width="match_parent"
@@ -46,16 +47,43 @@
                 android:maxLines="1"
                 android:ellipsize="end" />
 
+            <!-- 日期时间和时长（同一行） -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="4dp">
+
+                <TextView
+                    android:id="@+id/tvDateTime"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:text="日期时间" />
+
+                <TextView
+                    android:id="@+id/tvDuration"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:text="时长"
+                    android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <!-- 文件大小 -->
             <TextView
                 android:id="@android:id/text2"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="14sp"
+                android:textSize="12sp"
                 android:textColor="@color/text_secondary"
                 android:layout_marginTop="4dp" />
         </LinearLayout>
 
-        <!-- 更多操作按钮 -->
+        <!-- 更多操作按钮（暂隐藏） -->
         <ImageButton
             android:layout_width="32dp"
             android:layout_height="32dp"

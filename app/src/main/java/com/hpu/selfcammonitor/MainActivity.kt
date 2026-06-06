@@ -9,16 +9,16 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.provider.Settings
-import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.ToggleButton
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import java.io.File
@@ -28,11 +28,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvIpAddress: TextView
     private lateinit var tvStatus: TextView
     private lateinit var switchMjpeg: Switch
-    private lateinit var switchMotion: Switch
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
     private lateinit var tvStorage: TextView
     private lateinit var btnViewRecordings: Button
+
+    private lateinit var switchContinuous: SwitchCompat
+
+    private lateinit var switchMotion: SwitchCompat
 
     private val prefs by lazy { getSharedPreferences("camera_prefs", MODE_PRIVATE) }
 
@@ -67,15 +70,18 @@ class MainActivity : AppCompatActivity() {
         tvIpAddress = findViewById(R.id.tvIpAddress)
         tvStatus = findViewById(R.id.tvStatus)
         switchMjpeg = findViewById(R.id.switchMjpeg)
-        switchMotion = findViewById(R.id.switchMotion)
+
         btnStart = findViewById(R.id.btnStart)
         btnStop = findViewById(R.id.btnStop)
         tvStorage = findViewById(R.id.tvStorage)
         btnViewRecordings = findViewById(R.id.btnViewRecordings)
 
+        switchContinuous = findViewById(R.id.switch_continuous)
+        switchMotion = findViewById(R.id.switch_motion)
+
+
         // 恢复开关状态
         switchMjpeg.isChecked = prefs.getBoolean("mjpeg_enabled", true)
-        switchMotion.isChecked = prefs.getBoolean("motion_detection_enabled", true)
 
         // 启动按钮
         btnStart.setOnClickListener {
@@ -103,10 +109,45 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
 
+        // 加载保存的录像模式
+        val savedMode = prefs.getInt("record_mode", CameraService.MODE_PREVIEW_ONLY)
+        when (savedMode) {
+            CameraService.MODE_CONTINUOUS -> {
+                switchContinuous.isChecked = true
+                switchMotion.isChecked = false
+            }
+            CameraService.MODE_MOTION_TRIGGERED -> {
+                switchContinuous.isChecked = false
+                switchMotion.isChecked = true
+            }
+            else -> {
+                switchContinuous.isChecked = false
+                switchMotion.isChecked = false
+            }
+        }
+
+        // 设置互斥监听
+        switchContinuous.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                if (switchMotion.isChecked) switchMotion.isChecked = false
+                saveAndNotifyMode(CameraService.MODE_CONTINUOUS)
+            } else {
+                // 如果两个都关闭，则为预览模式
+                if (!switchMotion.isChecked) {
+                    saveAndNotifyMode(CameraService.MODE_PREVIEW_ONLY)
+                }
+            }
+        }
+
         switchMotion.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("motion_detection_enabled", isChecked).apply()
-            val intent = Intent("com.hpu.selfcammonitor.RELOAD_CONFIG")
-            LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+            if (isChecked) {
+                if (switchContinuous.isChecked) switchContinuous.isChecked = false
+                saveAndNotifyMode(CameraService.MODE_MOTION_TRIGGERED)
+            } else {
+                if (!switchContinuous.isChecked) {
+                    saveAndNotifyMode(CameraService.MODE_PREVIEW_ONLY)
+                }
+            }
         }
 
         // 查看录像按钮
@@ -123,6 +164,13 @@ class MainActivity : AppCompatActivity() {
         // 初始UI状态
         updateUI(isServiceRunning())
         updateStorageInfo()
+    }
+
+    // 辅助方法：保存模式并发送广播
+    private fun saveAndNotifyMode(mode: Int) {
+        prefs.edit().putInt("record_mode", mode).apply()
+        val intent = Intent("com.hpu.selfcammonitor.RELOAD_CONFIG")
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
 
     override fun onDestroy() {

@@ -13,6 +13,7 @@ import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraCharacteristics
 import android.media.MediaFormat
 import android.util.Log
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 
 
 class SettingsActivity : AppCompatActivity() {
@@ -29,6 +30,9 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var etEndTime: EditText
     private lateinit var etUsername: EditText
     private lateinit var etPassword: EditText
+
+    private lateinit var spinnerMotionDuration: Spinner
+    private lateinit var spinnerContinuousDuration: Spinner
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +54,8 @@ class SettingsActivity : AppCompatActivity() {
         etEndTime = findViewById(R.id.etEndTime)
         etUsername = findViewById(R.id.etUsername)
         etPassword = findViewById(R.id.etPassword)
+        spinnerMotionDuration = findViewById(R.id.spinner_motion_duration)
+        spinnerContinuousDuration = findViewById(R.id.spinner_continuous_duration)
 
         loadSettings()
         setupListeners()
@@ -75,6 +81,18 @@ class SettingsActivity : AppCompatActivity() {
         etEndTime.setText(prefs.getString("monitor_end", ""))
         etUsername.setText(prefs.getString("http_user", "admin"))
         etPassword.setText(prefs.getString("http_pass", ""))
+
+        // 加载运动录像时长（秒）
+        val motionSec = prefs.getInt("motion_clip_sec", CameraService.DEFAULT_MOTION_CLIP_SEC)
+        val motionValues = resources.getStringArray(R.array.motion_duration_values)
+        val motionIndex = motionValues.indexOf(motionSec.toString())
+        if (motionIndex >= 0) spinnerMotionDuration.setSelection(motionIndex)
+
+// 加载连续录像分段时长（秒）
+        val continuousSec = prefs.getInt("continuous_segment_sec", CameraService.DEFAULT_CONTINUOUS_SEGMENT_SEC)
+        val continuousValues = resources.getStringArray(R.array.continuous_duration_values)
+        val continuousIndex = continuousValues.indexOf(continuousSec.toString())
+        if (continuousIndex >= 0) spinnerContinuousDuration.setSelection(continuousIndex)
     }
 
     private fun loadSupportedResolutions() {
@@ -136,6 +154,31 @@ class SettingsActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar) {}
             override fun onStopTrackingTouch(seekBar: SeekBar) {}
         })
+
+        spinnerMotionDuration.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val values = resources.getStringArray(R.array.motion_duration_values)
+                val seconds = values[position].toInt()
+                prefs.edit().putInt("motion_clip_sec", seconds).apply()
+                sendReloadBroadcast()   // 实时通知服务生效
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        spinnerContinuousDuration.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val values = resources.getStringArray(R.array.continuous_duration_values)
+                val seconds = values[position].toInt()
+                prefs.edit().putInt("continuous_segment_sec", seconds).apply()
+                sendReloadBroadcast()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+    }
+
+    private fun sendReloadBroadcast() {
+        val intent = Intent("com.hpu.selfcammonitor.RELOAD_CONFIG")
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
 
     private fun saveSettings() {
@@ -143,6 +186,12 @@ class SettingsActivity : AppCompatActivity() {
 //        val resolutionIndex = spResolution.selectedItemPosition
 //        val resolution = resources.getStringArray(R.array.resolution_values)[resolutionIndex]
         val resolution = spResolution.selectedItem.toString()
+        // 在 saveSettings() 的 apply() 之前添加
+        val motionValues = resources.getStringArray(R.array.motion_duration_values)
+        val motionSec = motionValues[spinnerMotionDuration.selectedItemPosition].toInt()
+        val continuousValues = resources.getStringArray(R.array.continuous_duration_values)
+        val continuousSec = continuousValues[spinnerContinuousDuration.selectedItemPosition].toInt()
+
         prefs.edit()
             .putString("resolution", resolution)   // 保存纯字符串
             .putInt("fps", seekBarFps.progress)
@@ -154,6 +203,8 @@ class SettingsActivity : AppCompatActivity() {
             .putString("monitor_end", etEndTime.text.toString().trim())
             .putString("http_user", etUsername.text.toString().trim())
             .putString("http_pass", etPassword.text.toString().trim())
+            .putInt("motion_clip_sec", motionSec)
+            .putInt("continuous_segment_sec", continuousSec)
             .apply()
 
         Toast.makeText(this, "设置已保存", Toast.LENGTH_SHORT).show()

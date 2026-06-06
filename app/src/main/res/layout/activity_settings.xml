@@ -179,6 +179,37 @@
                     android:hint="http://192.168.1.100:3000/motion"
                     android:inputType="textUri" />
 
+                <!-- 运动录像时长 -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="运动录像时长"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginTop="16dp"
+                    android:layout_marginBottom="8dp" />
+
+                <Spinner
+                    android:id="@+id/spinner_motion_duration"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:entries="@array/motion_duration_labels"
+                    android:layout_marginBottom="16dp" />
+
+                <!-- 连续录像分段时长 -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="连续录像分段时长"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginBottom="8dp" />
+
+                <Spinner
+                    android:id="@+id/spinner_continuous_duration"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:entries="@array/continuous_duration_labels" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 

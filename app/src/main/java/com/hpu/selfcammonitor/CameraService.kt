@@ -59,7 +59,6 @@ class CameraService : LifecycleService() {
     // 配置项
     private var mjpegEnabled = true
     private var motionDetectionEnabled = true
-    private var continuousRecording = false // 暂未启用
 
     // 运动触发短视频录制（已验证可行）
 //    private lateinit var videoCapture: VideoCapture<Recorder>
@@ -72,8 +71,6 @@ class CameraService : LifecycleService() {
     private val handler = Handler(Looper.getMainLooper())
 
     private var lastIgnoredLogTime = 0L
-
-    private val clipDurationMs = 10_000L
 
     // 录制相关
     private var mediaRecorder: MediaRecorder? = null
@@ -93,10 +90,33 @@ class CameraService : LifecycleService() {
     private var monitorStart: String? = null   // 如 "08:00"
     private var monitorEnd: String? = null     // 如 "20:00"
 
+    // 录像模式
+    private var recordMode = MODE_MOTION_TRIGGERED
+    // 运动触发录像时长（毫秒）
+    private var motionClipDurationMs = DEFAULT_MOTION_CLIP_SEC * 1000L
+    // 连续录像分段时长（毫秒）
+    private var continuousSegmentDurationMs = DEFAULT_CONTINUOUS_SEGMENT_SEC * 1000L
+
+    // 连续录像相关
+    private var continuousRecording = false          // 是否处于连续录像状态
+    private var currentSegmentRecording: Recording? = null
+    private val continuousSegmentHandler = Handler(Looper.getMainLooper())
+    private var segmentRotateRunnable: Runnable? = null
+
     companion object {
         const val CHANNEL_ID = "camera_service_channel"
         const val NOTIFICATION_ID = 1
         const val TAG = "CameraService"
+
+        // CameraService.kt  companion object 内添加
+        const val MODE_CONTINUOUS = 0      // 连续录像
+        const val MODE_MOTION_TRIGGERED = 1 // 运动触发录像
+        const val MODE_PREVIEW_ONLY = 2    // 仅预览（不录像、不运动检测）
+
+        // 默认值
+        const val DEFAULT_MODE = MODE_MOTION_TRIGGERED
+        const val DEFAULT_MOTION_CLIP_SEC = 10      // 秒
+        const val DEFAULT_CONTINUOUS_SEGMENT_SEC = 600 // 10分钟
     }
 
     override fun onCreate() {
@@ -139,6 +159,13 @@ class CameraService : LifecycleService() {
         val rawUrl = prefs.getString("alert_url", null)
         alertManager.setAlertUrl(rawUrl?.takeIf { it.isNotBlank() && it.startsWith("http") })
         alertManager.setQuietPeriod(alertQuiet * 1000L) // 秒转毫秒
+
+        // 新增：录像模式
+        recordMode = prefs.getInt("record_mode", DEFAULT_MODE)
+        // 运动触发录像时长（秒转毫秒）
+        motionClipDurationMs = prefs.getInt("motion_clip_sec", DEFAULT_MOTION_CLIP_SEC) * 1000L
+        // 连续录像分段时长（秒转毫秒）
+        continuousSegmentDurationMs = prefs.getInt("continuous_segment_sec", DEFAULT_CONTINUOUS_SEGMENT_SEC) * 1000L
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -170,8 +197,30 @@ class CameraService : LifecycleService() {
 
     private val configReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            loadSettings()
-            Log.d(TAG, "配置已更新: mjpeg=$mjpegEnabled, motion=$motionDetectionEnabled")
+            val oldMode = recordMode
+            loadSettings() // 重新加载所有配置
+            when (recordMode) {
+                MODE_CONTINUOUS -> {
+                    if (oldMode != MODE_CONTINUOUS) {
+                        // 从其他模式切换到连续录像
+                        stopMotionRecordingIfNeeded()   // 停止可能正在进行的运动录像
+                        stopContinuousRecording()       // 停止旧连续录像（若有）
+                        startContinuousRecording()      // 启动新连续录像
+                    }
+                }
+                MODE_MOTION_TRIGGERED -> {
+                    if (oldMode == MODE_CONTINUOUS) {
+                        stopContinuousRecording()       // 停止连续录像
+                    }
+                    // 运动触发模式不需要立即录像，等待运动事件
+                }
+                MODE_PREVIEW_ONLY -> {
+                    // 停止所有录像
+                    stopContinuousRecording()
+                    stopMotionRecordingIfNeeded()
+                }
+            }
+            Log.d(TAG, "配置已更新: mode=$recordMode, motionClip=${motionClipDurationMs}ms, continuousSegment=${continuousSegmentDurationMs}ms")
         }
     }
 
@@ -182,7 +231,8 @@ class CameraService : LifecycleService() {
 
     override fun onDestroy() {
         super.onDestroy()
-
+        stopContinuousRecording()
+        stopMotionRecordingIfNeeded()
         streamServer.stop()
         cameraProvider?.unbindAll()
         cameraExecutor.shutdown()
@@ -245,8 +295,6 @@ class CameraService : LifecycleService() {
                 .build()
 
             imageAnalysis.setAnalyzer(cameraExecutor, ImageAnalysis.Analyzer { imageProxy ->
-
-
                 try {
                     // 检查是否在允许的监控时间段内
                     if (!isWithinTimeWindow()) {
@@ -260,17 +308,28 @@ class CameraService : LifecycleService() {
                         return@Analyzer
                     }
                     lastFrameTime = now
-//                    Log.d(TAG, "帧已分析，时间: ${System.currentTimeMillis()}")
-                    // 运动检测
-                    if (motionDetectionEnabled) {
-                        val motion = motionDetector.detectMotion(imageProxy)
-                        if (motion) {
-                            Log.d(TAG, "检测到运动")
-                            alertManager.sendMotionAlert()
-                            startClipRecording()   // 启动短视频录制
+
+                    // 根据录像模式处理
+                    when (recordMode) {
+                        MODE_CONTINUOUS -> {
+                            // 连续录像：确保录像正在运行（服务启动时开始，模式切换时处理）
+                            // 注意：连续录像的启动/停止在 onStartCommand 和模式切换时控制
+                            // 这里不需要额外动作，只需保持推流（如果需要）
+                        }
+                        MODE_MOTION_TRIGGERED -> {
+                            // 运动检测
+                            val motion = motionDetector.detectMotion(imageProxy)
+                            if (motion) {
+                                Log.d(TAG, "检测到运动")
+                                alertManager.sendMotionAlert()
+                                startClipRecording()  // 启动短视频录制
+                            }
+                        }
+                        MODE_PREVIEW_ONLY -> {
+                            // 不录像、不运动检测，直接跳过运动检测和录制逻辑
+                            // 注意：仍可保留 MJPEG 推流（如果用户需要预览）
                         }
                     }
-
                     // MJPEG 推流
                     if (mjpegEnabled) {
                         val jpegData = mjpegStreamer.imageToJpeg(imageProxy, 70)
@@ -278,6 +337,7 @@ class CameraService : LifecycleService() {
                             mjpegStreamer.pushFrame(jpegData)
                         }
                     }
+
                 } catch (e: Exception) {
                     Log.e(TAG, "帧分析错误", e)
                 } finally {
@@ -301,6 +361,11 @@ class CameraService : LifecycleService() {
                     videoCapture
                 )
                 Log.d(TAG, "相机绑定成功（含预览）")
+
+                // 绑定成功后根据模式启动连续录像
+                if (recordMode == MODE_CONTINUOUS) {
+                    startContinuousRecording()
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "相机绑定失败", e)
                 stopSelf()
@@ -308,18 +373,18 @@ class CameraService : LifecycleService() {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun generateMotionFileName(): String {
-        val timestamp = System.currentTimeMillis()
-        val date = Date(timestamp)
-
-        // 紧凑格式：YYMMDDHHmmss（12位） + 毫秒后3位
-        val formatter = SimpleDateFormat("yyMMddHHmmss", Locale.getDefault())
-        val dateTimePart = formatter.format(date)
-        // 获取时间戳最后3位并补零（如 012）
-        val lastThreeDigits = (timestamp % 1000).toString().padStart(3, '0')
-
-        return "motion_${dateTimePart}_${lastThreeDigits}.mp4"
-    }
+//    private fun generateMotionFileName(videoName : String): String {
+//        val timestamp = System.currentTimeMillis()
+//        val date = Date(timestamp)
+//
+//        // 紧凑格式：YYMMDDHHmmss（12位） + 毫秒后3位
+//        val formatter = SimpleDateFormat("yyyyMMDDHHmm", Locale.getDefault())
+//        val dateTimePart = formatter.format(date)
+//        // 获取时间戳最后3位并补零（如 012）
+//        val lastThreeDigits = (timestamp % 1000).toString().padStart(3, '0')
+//
+//        return "${videoName}_${dateTimePart}_${lastThreeDigits}.mp4"
+//    }
 
     private fun isWithinTimeWindow(): Boolean {
         val start = monitorStart ?: return true  // 为空时无限制，全天
@@ -349,7 +414,7 @@ class CameraService : LifecycleService() {
 
     private fun startClipRecording() {
         if (isRecording) return
-        val fileName = generateMotionFileName()
+        val fileName = "motion_${System.currentTimeMillis()}.mp4"
         val file = File(recordDir, fileName)
         val outputOptions = FileOutputOptions.Builder(file).build()
 
@@ -382,7 +447,7 @@ class CameraService : LifecycleService() {
         handler.postDelayed({
             recording?.stop()
             recording = null
-        }, clipDurationMs)
+        }, motionClipDurationMs)
     }
 
     private fun stopClipRecording() {
@@ -404,6 +469,84 @@ class CameraService : LifecycleService() {
         try { mediaRecorder?.release() } catch (_: Exception) {}
         mediaRecorder = null
         recordingSurface = null
+    }
+
+    /**
+     * 启动连续录像的第一个分段
+     */
+    private fun startContinuousRecording() {
+        if (recordMode != MODE_CONTINUOUS) return
+        if (continuousRecording) {
+            Log.d(TAG, "连续录像已在运行中")
+            return
+        }
+        continuousRecording = true
+        startNewContinuousSegment()
+    }
+
+    /**
+     * 开始一个新的连续录像分段文件
+     */
+    private fun startNewContinuousSegment() {
+        if (!continuousRecording) return
+
+        val fileName = "video_${System.currentTimeMillis()}.mp4"
+        val file = File(recordDir, fileName)
+        val outputOptions = FileOutputOptions.Builder(file).build()
+
+        val pending = videoCapture.output
+            .prepareRecording(this, outputOptions)
+            .apply {
+                if (ActivityCompat.checkSelfPermission(this@CameraService, Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED) {
+                    withAudioEnabled()
+                }
+            }
+            .start(ContextCompat.getMainExecutor(this)) { event ->
+                when (event) {
+                    is VideoRecordEvent.Start -> {
+                        Log.d(TAG, "连续录像分段开始: ${file.name}")
+                    }
+                    is VideoRecordEvent.Finalize -> {
+                        Log.d(TAG, "连续录像分段完成: ${file.name}, 原因: ${event.error}")
+                        // 分段结束后，如果仍处于连续录像模式，启动下一段
+                        if (recordMode == MODE_CONTINUOUS && continuousRecording) {
+                            startNewContinuousSegment()
+                        }
+                    }
+                }
+            }
+        currentSegmentRecording = pending
+
+        // 设置定时器，到达分段时长后停止当前分段（Finalize 事件中会自动开启下一段）
+        segmentRotateRunnable = Runnable {
+            if (recordMode == MODE_CONTINUOUS && continuousRecording) {
+                currentSegmentRecording?.stop()
+                currentSegmentRecording = null
+            }
+        }
+        continuousSegmentHandler.postDelayed(segmentRotateRunnable!!, continuousSegmentDurationMs)
+    }
+
+    /**
+     * 停止连续录像（取消定时器，停止当前分段）
+     */
+    private fun stopContinuousRecording() {
+        continuousRecording = false
+        segmentRotateRunnable?.let { continuousSegmentHandler.removeCallbacks(it) }
+        currentSegmentRecording?.stop()
+        currentSegmentRecording = null
+    }
+
+    /**
+     * 停止运动触发录像（如果正在录制）
+     */
+    private fun stopMotionRecordingIfNeeded() {
+        if (recordMode == MODE_MOTION_TRIGGERED && isRecording) {
+            recording?.stop()
+            recording = null
+            isRecording = false
+        }
     }
 
     private fun getLocalIpAddress(): String {

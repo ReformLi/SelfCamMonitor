@@ -58,6 +58,10 @@ class RecordingsActivity : AppCompatActivity() {
     private var isSelectMode = false
     private val selectedFiles = mutableSetOf<File>()
 
+    private var cachedDateTimeMap: Map<File, String>? = null
+    private var cachedDurationMap: Map<File, String>? = null
+    private var cachedFilesSignature: Int = 0  // 文件列表签名（用于判断是否变化）
+
     // SAF文件选择器
     private val pickDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let { treeUri ->
@@ -289,37 +293,129 @@ class RecordingsActivity : AppCompatActivity() {
     // ======================= 辅助方法 =======================
     private fun loadAllFiles() {
         val dir = File(getExternalFilesDir(null), "Recordings")
-        allFiles = if (dir.exists()) {
+        val newFiles = if (dir.exists()) {
             dir.listFiles()?.sortedByDescending { it.lastModified() } ?: emptyList()
         } else emptyList()
+
+        // 生成新文件列表的签名（例如组合路径+修改时间）
+        val newSignature = newFiles.hashCode()
+        if (cachedFilesSignature != newSignature) {
+            // 文件列表发生变化，清空缓存
+            cachedFilesSignature = newSignature
+            cachedDateTimeMap = null
+            cachedDurationMap = null
+        }
+
+        allFiles = newFiles
+    }
+
+    private fun loadFileMetadata(files: List<File>, callback: (Map<File, String>, Map<File, String>) -> Unit) {
+        Thread {
+            val dateTimeMap = mutableMapOf<File, String>()
+            val durationMap = mutableMapOf<File, String>()
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+
+            for (file in files) {
+                // 日期时间
+                val dateTimeStr = extractDateTimeFromFileName(file.name) ?: sdf.format(Date(file.lastModified()))
+                dateTimeMap[file] = dateTimeStr
+
+                // 视频时长：每次新建 retriever
+                var retriever: android.media.MediaMetadataRetriever? = null
+                try {
+                    retriever = android.media.MediaMetadataRetriever()
+                    retriever.setDataSource(file.absolutePath)
+                    val durationMs = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                    durationMap[file] = formatDuration(durationMs)
+                } catch (e: Exception) {
+                    android.util.Log.e("Metadata", "Failed to read duration for ${file.name}: ${e.message}")
+                    durationMap[file] = "未知"
+                } finally {
+                    retriever?.release()
+                }
+            }
+
+            runOnUiThread {
+                callback(dateTimeMap, durationMap)
+            }
+        }.start()
+    }
+
+    // 从文件名提取日期时间（根据你现有的命名规则）
+    private fun extractDateTimeFromFileName(fileName: String): String? {
+        // 运动触发文件格式: motion_YYMMDDHHmmss_xxx.mp4
+        val motionPattern = Regex("motion_(\\d{12})_\\d{3}\\.mp4")
+        motionPattern.find(fileName)?.let {
+            val dateTimePart = it.groupValues[1]  // YYMMDDHHmmss
+            return try {
+                val sdf = SimpleDateFormat("yyMMddHHmmss", Locale.getDefault())
+                val date = sdf.parse(dateTimePart)
+                SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(date)
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        // 连续录像文件格式: continuous_<timestamp>.mp4
+        val continuousPattern = Regex("continuous_(\\d+)\\.mp4")
+        continuousPattern.find(fileName)?.let {
+            val timestamp = it.groupValues[1].toLongOrNull()
+            if (timestamp != null) {
+                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                return sdf.format(Date(timestamp))
+            }
+        }
+        return null
+    }
+
+    // 将毫秒时长格式化为 mm:ss 或 HH:mm:ss
+    private fun formatDuration(millis: Long): String {
+        if (millis <= 0) return "0:00"
+        val seconds = millis / 1000
+        val hours = seconds / 3600
+        val minutes = (seconds % 3600) / 60
+        val secs = seconds % 60
+        return if (hours > 0) {
+            String.format("%d:%02d:%02d", hours, minutes, secs)
+        } else {
+            String.format("%d:%02d", minutes, secs)
+        }
     }
 
     private fun updateCurrentFiles(files: List<File>) {
-        // 只移除那些已经被删除的文件，保留其他选中的文件
-        selectedFiles.removeAll { selectedFile ->
-            selectedFile.exists().not() || !allFiles.contains(selectedFile)
-        }
         currentFiles = files
+        // 先创建一个空的 adapter（等待元数据加载完成后再设置）
         adapter = RecordingsAdapter(
             files,
             onFileClick = { file ->
-                if (isSelectMode) {
-                    toggleSelection(file)
-                } else {
-                    playVideo(file)
-                }
+                if (isSelectMode) toggleSelection(file)
+                else playVideo(file)
             },
             onFileLongClick = { _, file ->
-                if (!isSelectMode) {
-                    enterSelectMode(file)
-                }
+                if (!isSelectMode) enterSelectMode(file)
                 true
             }
         )
         adapter.isSelectMode = isSelectMode
         adapter.selectedFiles = selectedFiles
         recyclerView.adapter = adapter
-        // 无论是否在selectMode，只要selectedFiles发生变化就更新删除按钮
+
+        if (cachedDateTimeMap != null && cachedDurationMap != null) {
+            // 使用缓存
+            adapter.dateTimeMap = cachedDateTimeMap!!
+            adapter.durationMap = cachedDurationMap!!
+            adapter.notifyDataSetChanged()
+        } else {
+            // 异步加载并缓存
+            loadFileMetadata(files) { dateTimeMap, durationMap ->
+                cachedDateTimeMap = dateTimeMap
+                cachedDurationMap = durationMap
+                adapter.dateTimeMap = dateTimeMap
+                adapter.durationMap = durationMap
+                adapter.notifyDataSetChanged()
+            }
+        }
+
         updateDeleteButton()
         updateFileCountDisplay()
     }
@@ -521,10 +617,17 @@ class RecordingsAdapter(
     var selectedFiles: MutableSet<File> = mutableSetOf()
     var isSelectMode: Boolean = false
 
+    // 新增：存储每个文件的日期时间和时长
+    var dateTimeMap: Map<File, String> = emptyMap()
+    var durationMap: Map<File, String> = emptyMap()
+
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val tvFileName: TextView = view.findViewById(android.R.id.text1)
         val tvFileSize: TextView = view.findViewById(android.R.id.text2)
         val checkBox: CheckBox = view.findViewById(R.id.checkbox)
+
+        val tvDateTime: TextView = view.findViewById(R.id.tvDateTime)
+        val tvDuration: TextView = view.findViewById(R.id.tvDuration)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -538,16 +641,17 @@ class RecordingsAdapter(
         holder.tvFileName.text = file.name
         holder.tvFileSize.text = "${file.length() / 1024} KB"
 
-        // 多选框显示状态
+        // 设置日期时间和时长
+        holder.tvDateTime.text = dateTimeMap[file] ?: formatDateTime(file.lastModified())
+        holder.tvDuration.text = durationMap[file] ?: "未知"
+
+        // 多选框状态
         holder.checkBox.visibility = if (isSelectMode) View.VISIBLE else View.GONE
         holder.checkBox.isChecked = selectedFiles.contains(file)
 
-        // 短按
         holder.itemView.setOnClickListener {
-            android.util.Log.d("RecordingsActivity", "Item clicked: ${file.name}, isSelected=${selectedFiles.contains(file)}")
             onFileClick(file)
         }
-        // 长按
         holder.itemView.setOnLongClickListener {
             onFileLongClick(it, file)
         }
@@ -555,12 +659,9 @@ class RecordingsAdapter(
 
     override fun getItemCount() = files.size
 
-    // 更新选中状态并刷新UI
-    fun updateSelection(selectMode: Boolean, selected: MutableSet<File>) {
-        this.isSelectMode = selectMode
-        this.selectedFiles = selected
-        notifyDataSetChanged()
+    // 辅助方法：将时间戳转为可读日期时间
+    private fun formatDateTime(timestamp: Long): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        return sdf.format(Date(timestamp))
     }
-
-
 }
