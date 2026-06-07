@@ -5,7 +5,6 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/background_light"
-    android:focusableInTouchMode="true"
     android:fitsSystemWindows="true">
 
     <!-- 顶部工具栏 -->
@@ -24,7 +23,17 @@
             android:paddingVertical="8dp"
             android:gravity="center_vertical">
 
-            <!-- 全选按钮（多选模式显示） -->
+            <!-- 返回按钮（普通模式） -->
+            <ImageButton
+                android:id="@+id/btnBack"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:src="@android:drawable/ic_menu_revert"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="返回"
+                android:visibility="visible" />
+
+            <!-- 全选按钮（多选模式） -->
             <Button
                 android:id="@+id/btnSelectAll"
                 android:layout_width="wrap_content"
@@ -34,19 +43,20 @@
                 android:visibility="gone"
                 style="@style/Widget.Material3.Button.TextButton" />
 
-            <!-- 文件计数（普通模式显示） -->
+            <!-- 标题（普通模式） -->
             <TextView
-                android:id="@+id/tvFileCount"
+                android:id="@+id/tvTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="共 0 个文件夹"
-                android:textSize="14sp"
-                android:textColor="@color/text_secondary"
+                android:text="视频列表"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
                 android:gravity="center"
-                android:visibility="visible" />
+                android:paddingStart="8dp" />
 
-            <!-- 选中计数（多选模式显示） -->
+            <!-- 选中计数（多选模式） -->
             <TextView
                 android:id="@+id/tvSelectedCount"
                 android:layout_width="0dp"
@@ -58,7 +68,17 @@
                 android:gravity="center"
                 android:visibility="gone" />
 
-            <!-- 取消按钮（多选模式显示） -->
+            <!-- 文件数量（普通模式） -->
+            <TextView
+                android:id="@+id/tvFileCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="共 0 个视频"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:paddingHorizontal="8dp" />
+
+            <!-- 取消按钮（多选模式） -->
             <Button
                 android:id="@+id/btnCancelSelect"
                 android:layout_width="wrap_content"
@@ -67,11 +87,64 @@
                 android:textSize="14sp"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:visibility="gone" />
-
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- 录像列表 -->
+    <!-- 搜索栏：始终显示，位于列表上方 -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/searchBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="8dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        app:cardCornerRadius="8dp"
+        app:cardElevation="2dp"
+        android:visibility="visible">   <!-- 改为 visible -->
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp"
+            android:gravity="center_vertical">
+
+            <EditText
+                android:id="@+id/etSearch"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="输入文件名关键词"
+                android:singleLine="true"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:textSize="14sp"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_hint"
+                android:background="@null"
+                android:paddingVertical="8dp" />
+
+            <ImageButton
+                android:id="@+id/btnClearSearch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:src="@drawable/ic_close"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="清除"
+                android:padding="4dp"
+                android:visibility="gone" />   <!-- 初始隐藏，有文字时显示 -->
+
+            <Button
+                android:id="@+id/btnSearchConfirm"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="搜索"
+                android:textSize="14sp"
+                style="@style/Widget.Material3.Button.TextButton" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- 视频列表 -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"

@@ -46,6 +46,7 @@
         <activity
             android:name=".RecordingsActivity"
             android:exported="false" /> <!-- 允许 HTTP -->
+        <activity android:name=".VideoListActivity" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

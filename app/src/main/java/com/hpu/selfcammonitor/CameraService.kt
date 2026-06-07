@@ -42,6 +42,9 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.Inet4Address
 import java.net.NetworkInterface
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -415,8 +418,9 @@ class CameraService : LifecycleService() {
 
     private fun startClipRecording() {
         if (isRecording) return
+        val dailyDir = getDailyRecordDir()
         val fileName = "motion_${System.currentTimeMillis()}.mp4"
-        val file = File(recordDir, fileName)
+        val file = File(dailyDir, fileName)
         val outputOptions = FileOutputOptions.Builder(file).build()
 
         val pending = videoCapture.output
@@ -484,6 +488,13 @@ class CameraService : LifecycleService() {
         continuousRecording = true
         startNewContinuousSegment()
     }
+    //获取当前日期文件夹
+    private fun getDailyRecordDir(): File {
+        val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val dailyDir = File(recordDir, dateStr)
+        if (!dailyDir.exists()) dailyDir.mkdirs()
+        return dailyDir
+    }
 
     /**
      * 开始一个新的连续录像分段文件
@@ -491,8 +502,9 @@ class CameraService : LifecycleService() {
     private fun startNewContinuousSegment() {
         if (!continuousRecording) return
 
+        val dailyDir = getDailyRecordDir()
         val fileName = "video_${System.currentTimeMillis()}.mp4"
-        val file = File(recordDir, fileName)
+        val file = File(dailyDir, fileName)
         val outputOptions = FileOutputOptions.Builder(file).build()
 
         val pending = videoCapture.output

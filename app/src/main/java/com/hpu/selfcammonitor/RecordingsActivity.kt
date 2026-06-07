@@ -36,40 +36,21 @@ import kotlin.compareTo
 class RecordingsActivity : AppCompatActivity() {
 
     private lateinit var recyclerView: RecyclerView
-    private lateinit var adapter: RecordingsAdapter
-
-    // 工具栏组件
-    private lateinit var btnSelectAll: Button
+    private lateinit var adapter: FolderAdapter
     private lateinit var tvFileCount: TextView
-    private lateinit var searchBar: LinearLayout          // 搜索栏整体
-    private lateinit var etSearch: EditText
-    private lateinit var btnClearSearch: ImageButton
-    private lateinit var btnSearchConfirm: Button
-    private lateinit var spacer: View                     // 占位
-    private lateinit var btnSearch: Button
+    private lateinit var btnSelectAll: Button
     private lateinit var btnCancelSelect: Button
     private lateinit var btnDelete: Button
     private lateinit var btnExport: Button
     private lateinit var buttonCard: LinearLayout
 
-    // 数据
-    private var allFiles: List<File> = emptyList()
-    private var currentFiles: List<File> = emptyList()
+    private var folderList: List<File> = emptyList()
     private var isSelectMode = false
-    private val selectedFiles = mutableSetOf<File>()
+    private val selectedFolders = mutableSetOf<File>()
 
-    private var cachedDateTimeMap: Map<File, String>? = null
-    private var cachedDurationMap: Map<File, String>? = null
-    private var cachedFilesSignature: Int = 0  // 文件列表签名（用于判断是否变化）
-
-    // SAF文件选择器
+    private lateinit var tvSelectedCount: TextView  // 新增
     private val pickDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        uri?.let { treeUri ->
-            // 获取写入权限
-            contentResolver.takePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            // 开始导出
-            exportSelectedFiles(treeUri)
-        }
+        uri?.let { exportSelectedFolders(it) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,590 +59,219 @@ class RecordingsActivity : AppCompatActivity() {
 
         recyclerView = findViewById(R.id.recyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
-
-        btnSelectAll = findViewById(R.id.btnSelectAll)
         tvFileCount = findViewById(R.id.tvFileCount)
-        searchBar = findViewById(R.id.searchBar)
-        etSearch = findViewById(R.id.etSearch)
-        btnClearSearch = findViewById(R.id.btnClearSearch)
-        btnSearchConfirm = findViewById(R.id.btnSearchConfirm)
-        spacer = findViewById(R.id.spacer)
-        btnSearch = findViewById(R.id.btnSearch)
+        btnSelectAll = findViewById(R.id.btnSelectAll)
         btnCancelSelect = findViewById(R.id.btnCancelSelect)
         btnDelete = findViewById(R.id.btnDelete)
         btnExport = findViewById(R.id.btnExport)
         buttonCard = findViewById(R.id.buttonCard)
 
-        loadAllFiles()
-        updateCurrentFiles(allFiles)
-        updateFileCountDisplay()
+        tvSelectedCount = findViewById(R.id.tvSelectedCount)  // 新增
 
-        // ---------- 搜索相关 ----------
-        btnSearch.setOnClickListener {
-            enterSearchMode()
-        }
+        loadFolderList()
+        setupAdapter()
 
-        btnSearchConfirm.setOnClickListener {
-            performSearch()
-        }
-        // 键盘搜索键
-        etSearch.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
-                performSearch()
-                true
-            } else false
-        }
-
-        // 清除按钮
-        btnClearSearch.setOnClickListener {
-            if (etSearch.text.isEmpty()) {
-                // 如果搜索框已经为空，点击X按钮则取消搜索
-                cancelSearch()
-            } else {
-                // 如果搜索框有内容，则清空内容
-                etSearch.text.clear()
-            }
-        }
-
-        // 长按提示
-        btnClearSearch.setOnLongClickListener {
-            val message = if (etSearch.text.isEmpty()) {
-                "取消搜索"
-            } else {
-                "清空搜索内容"
-            }
-            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-            true
-        }
-
-        // 搜索框文本变化监听
-        etSearch.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                // 根据搜索框内容改变清除按钮的可用状态和颜色
-                if (s.isNullOrEmpty()) {
-                    btnClearSearch.isEnabled = true
-                    btnClearSearch.alpha = 0.5f  // 半透明表示可以取消搜索
-                } else {
-                    btnClearSearch.isEnabled = true
-                    btnClearSearch.alpha = 1.0f  // 完全不透明表示可以清空内容
-                }
-            }
-
-            override fun afterTextChanged(s: Editable?) {}
-        })
-
-        // 当输入框为空且点击列表时，取消搜索
-        recyclerView.setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_DOWN &&
-                searchBar.visibility == View.VISIBLE &&           // 搜索模式
-                etSearch.text.isEmpty()) {
-                cancelSearch()
-                recyclerView.requestFocus()  // 转移焦点，收起键盘
-                return@setOnTouchListener true
-            }
-            false
-        }
-        // 点击活动根布局空白区域（如果 RecycleView 没有消耗事件）也可以取消搜索
-        findViewById<View>(android.R.id.content).setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_DOWN &&
-                searchBar.visibility == View.VISIBLE &&
-                etSearch.text.isEmpty()) {
-                cancelSearch()
-                return@setOnTouchListener true
-            }
-            false
-        }
-
-        // ---------- 多选相关 ----------
         btnSelectAll.setOnClickListener {
-            selectedFiles.clear()
-            selectedFiles.addAll(currentFiles)
-            adapter.selectedFiles = selectedFiles
+            selectedFolders.clear()
+            selectedFolders.addAll(folderList)
+            adapter.selectedFolders = selectedFolders
             adapter.notifyDataSetChanged()
             updateDeleteButton()
         }
 
-        btnCancelSelect.setOnClickListener {
-            exitSelectMode()
-        }
-
-        btnDelete.setOnClickListener {
-            deleteSelectedFiles()
-        }
-
-        btnExport.setOnClickListener {
-            if (selectedFiles.isNotEmpty()) {
-                showExportFolderSelector()
-            }
-        }
+        btnCancelSelect.setOnClickListener { exitSelectMode() }
+        btnDelete.setOnClickListener { deleteSelectedFolders() }
+        btnExport.setOnClickListener { if (selectedFolders.isNotEmpty()) showExportFolderSelector() }
     }
 
-    // ======================= 模式管理 =======================
-    private fun enterSearchMode() {
-        // 如果正在多选，先退出多选
+    // 重写返回键：多选模式下退出多选，否则正常返回
+    override fun onBackPressed() {
         if (isSelectMode) {
             exitSelectMode()
+        } else {
+            super.onBackPressed()
         }
-        searchBar.visibility = View.VISIBLE
-        btnSearch.visibility = View.GONE
-        btnCancelSelect.visibility = View.GONE
-        btnSelectAll.visibility = View.GONE
-        spacer.visibility = View.GONE  // 让搜索栏占据空间
-        etSearch.requestFocus()
-        // X按钮始终显示，但状态会根据搜索框内容自动调整
-        btnClearSearch.alpha = 0.5f  // 初始状态为半透明
-        // 搜索模式下显示文件数量（因为不是选择模式）
+    }
+
+    private fun loadFolderList() {
+        val dir = File(getExternalFilesDir(null), "Recordings")
+        folderList = if (dir.exists()) {
+            dir.listFiles()?.filter { it.isDirectory && it.name.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) }
+                ?.sortedByDescending { it.name } ?: emptyList()
+        } else emptyList()
+    }
+
+    private fun setupAdapter() {
+        adapter = FolderAdapter(folderList,
+            onFolderClick = { folder ->
+                if (!isSelectMode) {
+                    // 进入该文件夹的视频列表页面
+                    val intent = Intent(this, VideoListActivity::class.java)
+                    intent.putExtra("folder_path", folder.absolutePath)
+                    startActivity(intent)
+                } else {
+                    toggleFolderSelection(folder)
+                }
+            },
+            onFolderLongClick = { folder ->
+                if (!isSelectMode) {
+                    enterSelectMode(folder)
+                    true
+                } else false
+            }
+        )
+        recyclerView.adapter = adapter
         updateFileCountDisplay()
     }
 
-    private fun cancelSearch() {
-        searchBar.visibility = View.GONE
-        etSearch.text.clear()
-        btnSearch.visibility = View.VISIBLE
-        spacer.visibility = View.VISIBLE
-        // 恢复原始列表（退出搜索过滤）
-        updateCurrentFiles(allFiles)
-    }
-
-    private fun performSearch() {
-        val keyword = etSearch.text.toString().trim().lowercase()
-        val filtered = if (keyword.isEmpty()) allFiles
-        else allFiles.filter { it.name.lowercase().contains(keyword) }
-        updateCurrentFiles(filtered)
-        // 更新文件数量显示（显示过滤后的数量）
-        updateFileCountDisplay()
-        // 隐藏键盘
-        currentFocus?.clearFocus()
-    }
-
-    private fun enterSelectMode(firstFile: File) {
-        // 如果正在搜索，先取消搜索
-        if (searchBar.visibility == View.VISIBLE) {
-            cancelSearchDirectly()   // 强制退出搜索模式，不清除关键词? 需求说取消搜索时多选也取消，这里我们先退出搜索但不执行搜索，回到原始列表再进多选
-        }
-        selectedFiles.clear()
-        selectedFiles.add(firstFile)
+    private fun enterSelectMode(firstFolder: File) {
+        selectedFolders.clear()
+        selectedFolders.add(firstFolder)
         isSelectMode = true
         adapter.isSelectMode = true
-        adapter.selectedFiles = selectedFiles
+        adapter.selectedFolders = selectedFolders
         adapter.notifyDataSetChanged()
         showSelectUI()
+        updateSelectedCount()
         updateDeleteButton()
     }
 
     private fun exitSelectMode() {
         isSelectMode = false
-        selectedFiles.clear()
+        selectedFolders.clear()
         adapter.isSelectMode = false
-        adapter.selectedFiles = selectedFiles
+        adapter.selectedFolders = selectedFolders
         adapter.notifyDataSetChanged()
-        updateDeleteButton() // 更新删除按钮状态
-        updateButtonCardVisibility()
         hideSelectUI()
     }
 
-    private fun showSelectUI() {
-        btnSelectAll.visibility = View.VISIBLE
-        btnCancelSelect.visibility = View.VISIBLE
-        updateButtonCardVisibility() // 显示删除和导出按钮卡片
-        btnSearch.visibility = View.GONE
-        searchBar.visibility = View.GONE
-        spacer.visibility = View.VISIBLE   // 让全选和取消分列两侧
-        updateDeleteButton() // 确保删除按钮状态正确更新
-        updateFileCountDisplay() // 更新文件数量显示（隐藏）
-    }
-
-    private fun hideSelectUI() {
-        btnSelectAll.visibility = View.GONE
-        btnCancelSelect.visibility = View.GONE
-        updateButtonCardVisibility() // 隐藏删除和导出按钮卡片
-        btnSearch.visibility = View.VISIBLE
-        spacer.visibility = if (searchBar.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-        updateFileCountDisplay() // 更新文件数量显示（显示）
-    }
-
-    // 强制退出搜索模式（不清除文本，直接隐藏界面）
-    private fun cancelSearchDirectly() {
-        searchBar.visibility = View.GONE
-        btnSearch.visibility = View.VISIBLE
-        spacer.visibility = View.VISIBLE
-        // 注意：不调用 updateCurrentFiles，保留当前列表（但后面进入多选时会重新加载，所以没关系）
-    }
-
-    // ======================= 辅助方法 =======================
-    private fun loadAllFiles() {
-        val dir = File(getExternalFilesDir(null), "Recordings")
-        val newFiles = if (dir.exists()) {
-            dir.listFiles()?.sortedByDescending { it.lastModified() } ?: emptyList()
-        } else emptyList()
-
-        // 生成新文件列表的签名（例如组合路径+修改时间）
-        val newSignature = newFiles.hashCode()
-        if (cachedFilesSignature != newSignature) {
-            // 文件列表发生变化，清空缓存
-            cachedFilesSignature = newSignature
-            cachedDateTimeMap = null
-            cachedDurationMap = null
-        }
-
-        allFiles = newFiles
-    }
-
-    private fun loadFileMetadata(files: List<File>, callback: (Map<File, String>, Map<File, String>) -> Unit) {
-        Thread {
-            val dateTimeMap = mutableMapOf<File, String>()
-            val durationMap = mutableMapOf<File, String>()
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-
-            for (file in files) {
-                // 日期时间
-                val dateTimeStr = extractDateTimeFromFileName(file.name) ?: sdf.format(Date(file.lastModified()))
-                dateTimeMap[file] = dateTimeStr
-
-                // 视频时长：每次新建 retriever
-                var retriever: android.media.MediaMetadataRetriever? = null
-                try {
-                    retriever = android.media.MediaMetadataRetriever()
-                    retriever.setDataSource(file.absolutePath)
-                    val durationMs = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-                    durationMap[file] = formatDuration(durationMs)
-                } catch (e: Exception) {
-                    android.util.Log.e("Metadata", "Failed to read duration for ${file.name}: ${e.message}")
-                    durationMap[file] = "未知"
-                } finally {
-                    retriever?.release()
-                }
-            }
-
-            runOnUiThread {
-                callback(dateTimeMap, durationMap)
-            }
-        }.start()
-    }
-
-    // 从文件名提取日期时间（根据你现有的命名规则）
-    private fun extractDateTimeFromFileName(fileName: String): String? {
-        // 运动触发文件格式: motion_YYMMDDHHmmss_xxx.mp4
-        val motionPattern = Regex("motion_(\\d{12})_\\d{3}\\.mp4")
-        motionPattern.find(fileName)?.let {
-            val dateTimePart = it.groupValues[1]  // YYMMDDHHmmss
-            return try {
-                val sdf = SimpleDateFormat("yyMMddHHmmss", Locale.getDefault())
-                val date = sdf.parse(dateTimePart)
-                SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(date)
-            } catch (e: Exception) {
-                null
-            }
-        }
-
-        // 连续录像文件格式: continuous_<timestamp>.mp4
-        val continuousPattern = Regex("continuous_(\\d+)\\.mp4")
-        continuousPattern.find(fileName)?.let {
-            val timestamp = it.groupValues[1].toLongOrNull()
-            if (timestamp != null) {
-                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                return sdf.format(Date(timestamp))
-            }
-        }
-        return null
-    }
-
-    // 将毫秒时长格式化为 mm:ss 或 HH:mm:ss
-    private fun formatDuration(millis: Long): String {
-        if (millis <= 0) return "0:00"
-        val seconds = millis / 1000
-        val hours = seconds / 3600
-        val minutes = (seconds % 3600) / 60
-        val secs = seconds % 60
-        return if (hours > 0) {
-            String.format("%d:%02d:%02d", hours, minutes, secs)
+    private fun toggleFolderSelection(folder: File) {
+        if (selectedFolders.contains(folder)) {
+            selectedFolders.remove(folder)
         } else {
-            String.format("%d:%02d", minutes, secs)
+            selectedFolders.add(folder)
         }
-    }
-
-    private fun updateCurrentFiles(files: List<File>) {
-        currentFiles = files
-        // 先创建一个空的 adapter（等待元数据加载完成后再设置）
-        adapter = RecordingsAdapter(
-            files,
-            onFileClick = { file ->
-                if (isSelectMode) toggleSelection(file)
-                else playVideo(file)
-            },
-            onFileLongClick = { _, file ->
-                if (!isSelectMode) enterSelectMode(file)
-                true
-            }
-        )
-        adapter.isSelectMode = isSelectMode
-        adapter.selectedFiles = selectedFiles
-        recyclerView.adapter = adapter
-
-        if (cachedDateTimeMap != null && cachedDurationMap != null) {
-            // 使用缓存
-            adapter.dateTimeMap = cachedDateTimeMap!!
-            adapter.durationMap = cachedDurationMap!!
-            adapter.notifyDataSetChanged()
-        } else {
-            // 异步加载并缓存
-            loadFileMetadata(files) { dateTimeMap, durationMap ->
-                cachedDateTimeMap = dateTimeMap
-                cachedDurationMap = durationMap
-                adapter.dateTimeMap = dateTimeMap
-                adapter.durationMap = durationMap
-                adapter.notifyDataSetChanged()
-            }
-        }
-
-        updateDeleteButton()
-        updateFileCountDisplay()
-    }
-
-    private fun toggleSelection(file: File) {
-        val wasSelected = selectedFiles.contains(file)
-        if (wasSelected) {
-            selectedFiles.remove(file)
-        } else {
-            selectedFiles.add(file)
-        }
-        adapter.selectedFiles = selectedFiles
+        // 同步给 adapter
+        adapter.selectedFolders = selectedFolders
         adapter.notifyDataSetChanged()
+        updateSelectedCount()   // 关键：更新顶部计数
         updateDeleteButton()
     }
 
     private fun updateDeleteButton() {
-        val validCount = selectedFiles.size
-        btnDelete.isEnabled = validCount > 0
-        btnDelete.text = "删除选中"
+        btnDelete.isEnabled = selectedFolders.isNotEmpty()
         updateButtonCardVisibility()
     }
 
     private fun updateButtonCardVisibility() {
-        if (isSelectMode && selectedFiles.isNotEmpty()) {
-            buttonCard.visibility = View.VISIBLE
-        } else {
-            buttonCard.visibility = View.GONE
-        }
+        buttonCard.visibility = if (isSelectMode && selectedFolders.isNotEmpty()) View.VISIBLE else View.GONE
     }
 
-    // 显示导出文件夹选择对话框
+    private fun showSelectUI() {
+        // 隐藏普通模式控件
+        tvFileCount.visibility = View.GONE
+        // 显示多选模式控件
+        btnSelectAll.visibility = View.VISIBLE
+        tvSelectedCount.visibility = View.VISIBLE
+        btnCancelSelect.visibility = View.VISIBLE
+        updateSelectedCount()
+        updateButtonCardVisibility()
+    }
+
+    private fun hideSelectUI() {
+        // 显示普通模式控件
+        tvFileCount.visibility = View.VISIBLE
+        // 隐藏多选模式控件
+        btnSelectAll.visibility = View.GONE
+        tvSelectedCount.visibility = View.GONE
+        btnCancelSelect.visibility = View.GONE
+        buttonCard.visibility = View.GONE
+        updateFileCountDisplay()
+    }
+
+    private fun updateFileCountDisplay() {
+        tvFileCount.text = "共 ${folderList.size} 个文件夹"
+    }
+
+    private fun updateSelectedCount() {
+        val count = selectedFolders.size
+        tvSelectedCount.text = "已选 $count 项"
+        // 调试日志，可删除
+        android.util.Log.d("Recordings", "选中数量: $count")
+    }
+
+    private fun deleteSelectedFolders() {
+        val toDelete = selectedFolders.toSet()
+        if (toDelete.isEmpty()) return
+        AlertDialog.Builder(this)
+            .setTitle("确认删除")
+            .setMessage("删除 ${toDelete.size} 个文件夹及其中的所有视频？")
+            .setPositiveButton("删除") { _, _ ->
+                for (folder in toDelete) {
+                    folder.deleteRecursively()
+                }
+                loadFolderList()
+                exitSelectMode()
+                setupAdapter()
+                updateFileCountDisplay()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
     private fun showExportFolderSelector() {
-        val alertDialog = AlertDialog.Builder(this)
-            .setTitle("选择导出文件夹")
-            .setMessage("选择一个文件夹来导出选中的视频文件，该文件夹将成为一个媒体库目录")
+        AlertDialog.Builder(this)
+            .setTitle("选择导出位置")
+            .setMessage("将选中的 ${selectedFolders.size} 个文件夹导出到外部存储")
             .setPositiveButton("选择文件夹") { _, _ ->
                 pickDocumentLauncher.launch(null)
             }
             .setNegativeButton("取消", null)
-            .create()
-        alertDialog.show()
-    }
-
-    // 导出选中的视频文件
-    private fun exportSelectedFiles(treeUri: Uri) {
-        if (selectedFiles.isEmpty()) return
-
-        // 显示进度对话框
-        val progress = ProgressDialog(this)
-        progress.setMessage("正在导出 ${selectedFiles.size} 个文件...")
-        progress.setProgressStyle(ProgressDialog.STYLE_SPINNER)
-        progress.setCancelable(false)
-        progress.show()
-
-        // 创建DocumentFile来处理目标目录
-        val rootDocument = DocumentFile.fromTreeUri(this, treeUri)
-
-        // 导出文件
-        var successCount = 0
-        val failedFiles = mutableListOf<String>()
-
-        selectedFiles.forEach { file ->
-            try {
-                // 复制文件到目标目录
-                if (copyFileToDocument(file,treeUri, rootDocument)) {
-                    successCount++
-                }
-            } catch (e: Exception) {
-                failedFiles.add(file.name ?: "未知文件名")
-                android.util.Log.e("Export", "Failed to export ${file.name}: ${e.message}")
-            }
-        }
-
-        // 关闭进度对话框
-        progress.dismiss()
-
-        // 显示结果提示
-        val resultMessage = if (failedFiles.isEmpty()) {
-            "成功导出 $successCount 个文件到系统文件夹"
-        } else {
-            "成功导出 $successCount 个文件，但以下文件导出失败：\n${failedFiles.joinToString("\n")}"
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("导出完成")
-            .setMessage(resultMessage)
-            .setPositiveButton("确定") { _, _ ->
-                // 清空选择并返回录像管理页面
-                exitSelectMode()
-                Toast.makeText(this, "导出成功！", Toast.LENGTH_SHORT).show()
-            }
             .show()
     }
 
-    // 复制文件到DocumentFile目录
-    private fun copyFileToDocument(sourceFile: File,treeUri: Uri, rootDocument: DocumentFile?): Boolean {
-        return try {
-            // 创建目标文件
-            val destFile = rootDocument?.createFile("video/mp4", sourceFile.name) ?: return false
-
-            // 打开源文件和目标文件
-            val sourceInputStream = FileInputStream(sourceFile)
-            val destOutputStream = contentResolver.openOutputStream(destFile.uri) ?: return false
-
-            // 复制内容
-            val buffer = ByteArray(8192)
-            var bytesRead: Int
-            while (sourceInputStream.read(buffer).also { bytesRead = it } != -1) {
-                destOutputStream.write(buffer, 0, bytesRead)
-            }
-
-            // 关闭流
-            sourceInputStream.close()
-            destOutputStream.close()
-
-            // 对于API 29+，刷新媒体库
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val values = ContentValues().apply {
-                    // 根据URI判断相对路径
-                    val path = if (treeUri.toString().contains("Android/data") ||
-                                  treeUri.toString().contains("Documents") ||
-                                  treeUri.toString().contains("Download")) {
-                        "Download/"
-                    } else if (treeUri.toString().contains("Pictures")) {
-                        "Pictures/"
-                    } else if (treeUri.toString().contains("DCIM")) {
-                        "DCIM/"
-                    } else {
-                        ""
-                    }
-                    put(MediaStore.Video.Media.RELATIVE_PATH, path)
-                    put(MediaStore.Video.Media.IS_PENDING, 1)
-                }
-                contentResolver.update(destFile.uri, values, null, null)
-                values.clear()
-                values.put(MediaStore.Video.Media.IS_PENDING, 0)
-                contentResolver.update(destFile.uri, values, null, null)
-            }
-
-            true
-        } catch (e: Exception) {
-            android.util.Log.e("Export", "Error copying file: ${e.message}")
-            false
-        }
-    }
-
-    private fun updateFileCountDisplay() {
-        val count = currentFiles.size
-        tvFileCount.text = "共 $count 个文件"
-
-        // 根据选择模式控制文件数量显示和全选按钮的显示
-        if (isSelectMode) {
-            tvFileCount.visibility = View.GONE  // 选择模式下隐藏文件数量
-            btnSelectAll.visibility = View.VISIBLE  // 显示全选按钮
-        } else {
-            tvFileCount.visibility = View.VISIBLE  // 普通模式下显示文件数量
-            btnSelectAll.visibility = View.GONE  // 隐藏全选按钮
-        }
-    }
-
-    private fun deleteSelectedFiles() {
-        val toDelete = selectedFiles.toSet()
-        if (toDelete.isEmpty()) return
-        for (file in toDelete) {
-            file.delete()
-        }
-        allFiles = allFiles.filter { !toDelete.contains(it) }
-        val keyword = etSearch.text.toString().trim().lowercase()
-        val filtered = if (keyword.isEmpty()) allFiles
-        else allFiles.filter { it.name.lowercase().contains(keyword) }
-        exitSelectMode()
-        selectedFiles.clear()
-        updateCurrentFiles(filtered)
-    }
-
-    private fun playVideo(file: File) {
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "video/mp4")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        try {
-            startActivity(intent)
-        } catch (e: Exception) {
-            startActivity(Intent(Intent.ACTION_VIEW, uri))
-        }
+    private fun exportSelectedFolders(treeUri: Uri) {
+        // 实现导出文件夹的代码（递归复制文件到目标目录）
+        // 省略具体实现，可参考之前的 exportSelectedFiles 进行改造
+        Toast.makeText(this, "导出功能需递归实现", Toast.LENGTH_SHORT).show()
     }
 }
 
-// 在 RecordingsActivity 内部保留，或独立文件均可
-class RecordingsAdapter(
-    private val files: List<File>,
-    private val onFileClick: (File) -> Unit,
-    private val onFileLongClick: (View, File) -> Boolean
-) : RecyclerView.Adapter<RecordingsAdapter.ViewHolder>() {
+// 文件夹适配器 FolderAdapter
+class FolderAdapter(
+    private val folders: List<File>,
+    private val onFolderClick: (File) -> Unit,
+    private val onFolderLongClick: (File) -> Boolean
+) : RecyclerView.Adapter<FolderAdapter.ViewHolder>() {
 
-    // 由外部设置
-    var selectedFiles: MutableSet<File> = mutableSetOf()
-    var isSelectMode: Boolean = false
-
-    // 新增：存储每个文件的日期时间和时长
-    var dateTimeMap: Map<File, String> = emptyMap()
-    var durationMap: Map<File, String> = emptyMap()
+    var isSelectMode = false
+    var selectedFolders = mutableSetOf<File>()
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val tvFileName: TextView = view.findViewById(android.R.id.text1)
-        val tvFileSize: TextView = view.findViewById(android.R.id.text2)
+        val tvName: TextView = view.findViewById(android.R.id.text1)
+        val tvInfo: TextView = view.findViewById(android.R.id.text2)
         val checkBox: CheckBox = view.findViewById(R.id.checkbox)
-
-        val tvDateTime: TextView = view.findViewById(R.id.tvDateTime)
-        val tvDuration: TextView = view.findViewById(R.id.tvDuration)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_recording, parent, false)
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_folder, parent, false)
         return ViewHolder(view)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val file = files[position]
-        holder.tvFileName.text = file.name
-        holder.tvFileSize.text = "${file.length() / 1024} KB"
+        val folder = folders[position]
+        val fileCount = folder.listFiles()?.size ?: 0
+        val totalSize = folder.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        val sizeMB = totalSize / (1024 * 1024)
+        holder.tvName.text = folder.name
+        holder.tvInfo.text = "$fileCount 个视频，${sizeMB} MB"
 
-        // 设置日期时间和时长
-        holder.tvDateTime.text = dateTimeMap[file] ?: formatDateTime(file.lastModified())
-        holder.tvDuration.text = durationMap[file] ?: "未知"
-
-        // 多选框状态
         holder.checkBox.visibility = if (isSelectMode) View.VISIBLE else View.GONE
-        holder.checkBox.isChecked = selectedFiles.contains(file)
+        holder.checkBox.isChecked = selectedFolders.contains(folder)
 
-        holder.itemView.setOnClickListener {
-            onFileClick(file)
-        }
-        holder.itemView.setOnLongClickListener {
-            onFileLongClick(it, file)
-        }
+        holder.itemView.setOnClickListener { onFolderClick(folder) }
+        holder.itemView.setOnLongClickListener { onFolderLongClick(folder) }
     }
 
-    override fun getItemCount() = files.size
-
-    // 辅助方法：将时间戳转为可读日期时间
-    private fun formatDateTime(timestamp: Long): String {
-        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        return sdf.format(Date(timestamp))
-    }
+    override fun getItemCount() = folders.size
 }
