@@ -11,6 +11,7 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
@@ -29,6 +30,7 @@ class VideoListActivity : AppCompatActivity() {
     private lateinit var adapter: VideoAdapter
     private lateinit var tvTitle: TextView
     private lateinit var tvFileCount: TextView
+    private lateinit var tvSelectedCount: TextView
     private lateinit var btnBack: ImageButton
     private lateinit var btnSelectAll: Button
     private lateinit var btnCancelSelect: Button
@@ -54,20 +56,10 @@ class VideoListActivity : AppCompatActivity() {
 
     private lateinit var folderPath: String
 
-    private lateinit var tvSelectedCount: TextView
-
     private val pickDocumentLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         uri?.let { exportSelectedVideos(it) }
-    }
-
-    override fun onBackPressed() {
-        if (isSelectMode) {
-            exitSelectMode()
-        } else {
-            super.onBackPressed()
-        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -84,6 +76,18 @@ class VideoListActivity : AppCompatActivity() {
         setupAdapter()
         setupListeners()
         setupSearchBar()
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (isSelectMode) {
+                    exitSelectMode()
+                } else {
+                    // 注意：这里不能直接调用 super.onBackPressed()
+                    // 需要调用 finish() 或传递给上一个回调
+                    finish()
+                }
+            }
+        })
     }
 
     private fun initViews() {
@@ -91,6 +95,7 @@ class VideoListActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         tvTitle = findViewById(R.id.tvTitle)
         tvFileCount = findViewById(R.id.tvFileCount)
+        tvSelectedCount = findViewById(R.id.tvSelectedCount)
         btnBack = findViewById(R.id.btnBack)
         btnSelectAll = findViewById(R.id.btnSelectAll)
         btnCancelSelect = findViewById(R.id.btnCancelSelect)
@@ -102,7 +107,6 @@ class VideoListActivity : AppCompatActivity() {
         etSearch = findViewById(R.id.etSearch)
         btnClearSearch = findViewById(R.id.btnClearSearch)
         btnSearchConfirm = findViewById(R.id.btnSearchConfirm)
-        tvSelectedCount = findViewById(R.id.tvSelectedCount)
 
         val folderFile = File(folderPath)
         tvTitle.text = folderFile.name
@@ -224,8 +228,12 @@ class VideoListActivity : AppCompatActivity() {
 
         btnClearSearch.setOnClickListener {
             if (etSearch.text.isNotEmpty()) {
+                // 有文字：清空输入框，并触发搜索（刷新为全部列表）
                 etSearch.text.clear()
+                performSearch()   // 这会重新根据空关键词过滤，显示全部视频
+                // 焦点保留，键盘不隐藏（clear 后焦点会自动保留）
             } else {
+                // 无文字：隐藏键盘并清除焦点
                 etSearch.clearFocus()
                 val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
                 imm.hideSoftInputFromWindow(etSearch.windowToken, 0)
@@ -269,19 +277,9 @@ class VideoListActivity : AppCompatActivity() {
             updateDeleteButton()
         }
 
-        btnCancelSelect.setOnClickListener {
-            exitSelectMode()
-        }
-
-        btnDelete.setOnClickListener {
-            deleteSelectedVideos()
-        }
-
-        btnExport.setOnClickListener {
-            if (selectedVideos.isNotEmpty()) {
-                showExportSelector()
-            }
-        }
+        btnCancelSelect.setOnClickListener { exitSelectMode() }
+        btnDelete.setOnClickListener { deleteSelectedVideos() }
+        btnExport.setOnClickListener { if (selectedVideos.isNotEmpty()) showExportSelector() }
     }
 
     private fun enterSelectMode(firstVideo: File) {
@@ -310,7 +308,15 @@ class VideoListActivity : AppCompatActivity() {
         else selectedVideos.add(video)
         adapter.selectedVideos = selectedVideos
         adapter.notifyDataSetChanged()
+        updateSelectedCount()
         updateDeleteButton()
+    }
+
+    private fun updateSelectedCount() {
+        val count = selectedVideos.size
+        tvSelectedCount.text = "已选 $count 项"
+        // 调试日志
+        android.util.Log.d("VideoList", "选中数量: $count")
     }
 
     private fun updateDeleteButton() {
@@ -327,6 +333,8 @@ class VideoListActivity : AppCompatActivity() {
         btnBack.visibility = View.GONE
         tvTitle.visibility = View.GONE
         tvFileCount.visibility = View.GONE
+        // 隐藏搜索栏（新增）
+        searchBar.visibility = View.GONE
         // 显示多选模式控件
         btnSelectAll.visibility = View.VISIBLE
         tvSelectedCount.visibility = View.VISIBLE
@@ -340,21 +348,19 @@ class VideoListActivity : AppCompatActivity() {
         btnBack.visibility = View.VISIBLE
         tvTitle.visibility = View.VISIBLE
         tvFileCount.visibility = View.VISIBLE
+        // 显示搜索栏（新增）
+        searchBar.visibility = View.VISIBLE
         // 隐藏多选模式控件
         btnSelectAll.visibility = View.GONE
         tvSelectedCount.visibility = View.GONE
         btnCancelSelect.visibility = View.GONE
-        updateFileCountDisplay()
         buttonCard.visibility = View.GONE
+        updateFileCountDisplay()
     }
 
     private fun updateFileCountDisplay() {
         val count = currentVideos.size
         tvFileCount.text = "共 $count 个视频"
-    }
-
-    private fun updateSelectedCount() {
-        tvSelectedCount.text = "已选 ${selectedVideos.size} 项"
     }
 
     private fun deleteSelectedVideos() {

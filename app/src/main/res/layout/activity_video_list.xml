@@ -90,17 +90,16 @@
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- 搜索栏：始终显示，位于列表上方 -->
+    <!-- 搜索栏（始终显示） -->
     <androidx.cardview.widget.CardView
         android:id="@+id/searchBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="8dp"
-        android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp"
         app:cardCornerRadius="8dp"
         app:cardElevation="2dp"
-        android:visibility="visible">   <!-- 改为 visible -->
+        android:visibility="visible">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -132,7 +131,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="清除"
                 android:padding="4dp"
-                android:visibility="gone" />   <!-- 初始隐藏，有文字时显示 -->
+                android:visibility="gone" />
 
             <Button
                 android:id="@+id/btnSearchConfirm"

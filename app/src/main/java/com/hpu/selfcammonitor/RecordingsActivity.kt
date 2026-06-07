@@ -30,6 +30,7 @@ import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.*
 import android.view.MotionEvent
+import androidx.activity.OnBackPressedCallback
 import kotlin.compareTo
 
 
@@ -82,15 +83,18 @@ class RecordingsActivity : AppCompatActivity() {
         btnCancelSelect.setOnClickListener { exitSelectMode() }
         btnDelete.setOnClickListener { deleteSelectedFolders() }
         btnExport.setOnClickListener { if (selectedFolders.isNotEmpty()) showExportFolderSelector() }
-    }
 
-    // 重写返回键：多选模式下退出多选，否则正常返回
-    override fun onBackPressed() {
-        if (isSelectMode) {
-            exitSelectMode()
-        } else {
-            super.onBackPressed()
-        }
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (isSelectMode) {
+                    exitSelectMode()
+                } else {
+                    // 注意：这里不能直接调用 super.onBackPressed()
+                    // 需要调用 finish() 或传递给上一个回调
+                    finish()
+                }
+            }
+        })
     }
 
     private fun loadFolderList() {
