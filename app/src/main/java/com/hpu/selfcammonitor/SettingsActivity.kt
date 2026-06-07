@@ -4,16 +4,22 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.ImageFormat
-import android.graphics.SurfaceTexture
-import android.os.Bundle
-import android.view.View
-import android.widget.*
-import androidx.appcompat.app.AppCompatActivity
-import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraCharacteristics
-import android.media.MediaFormat
+import android.hardware.camera2.CameraManager
+import android.os.Bundle
 import android.util.Log
+import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.EditText
+import android.widget.SeekBar
+import android.widget.Spinner
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.google.android.material.switchmaterial.SwitchMaterial
 
 
 class SettingsActivity : AppCompatActivity() {
@@ -23,7 +29,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvFpsValue: TextView
     private lateinit var seekBarSensitivity: SeekBar
     private lateinit var tvSensitivityValue: TextView
-    private lateinit var switchBoot: Switch
+    private lateinit var switchBoot: SwitchMaterial
     private lateinit var etAlertUrl: EditText
     private lateinit var etAlertQuiet: EditText
     private lateinit var etStartTime: EditText
@@ -68,7 +74,9 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun loadSettings() {
-        seekBarFps.progress = prefs.getInt("fps", 10)
+        var fps = prefs.getInt("fps", 10)
+        if (fps > 16) fps = 16   // 限制最大16
+        seekBarFps.progress = fps
         tvFpsValue.text = "${seekBarFps.progress} fps"
 
         seekBarSensitivity.progress = prefs.getInt("sensitivity", 50)

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 选中状态：半透明青蓝（呼吸感） -->
+    <item android:color="#F0C4C8" android:state_checked="true" />
+    <!-- 未选中状态：极浅灰（干净留白） -->
+    <item android:color="#ECEFF1" />
+</selector>

@@ -43,8 +43,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             app:cardCornerRadius="12dp"
-            app:cardElevation="4dp"
-            xmlns:app="http://schemas.android.com/apk/res-auto">
+            app:cardElevation="4dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -127,10 +126,12 @@
                             android:textSize="12sp"
                             android:textColor="@color/text_secondary" />
                     </LinearLayout>
-                    <Switch
+                    <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/switchMjpeg"
                         android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
+                        android:layout_height="wrap_content"
+                        app:thumbTint="@color/thumb_tint"
+                        app:trackTint="@color/track_tint" />
                 </LinearLayout>
 
                 <View
@@ -175,7 +176,9 @@
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/switch_continuous"
                             android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" />
+                            android:layout_height="wrap_content"
+                            app:thumbTint="@color/thumb_tint"
+                            app:trackTint="@color/track_tint" />
                     </LinearLayout>
 
                     <!-- 运动触发录像开关 -->
@@ -207,7 +210,9 @@
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/switch_motion"
                             android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" />
+                            android:layout_height="wrap_content"
+                            app:thumbTint="@color/thumb_tint"
+                            app:trackTint="@color/track_tint" />
                     </LinearLayout>
 
                 </LinearLayout>

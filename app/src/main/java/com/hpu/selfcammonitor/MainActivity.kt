@@ -12,22 +12,22 @@ import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
 import android.widget.ImageButton
-import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
-import android.widget.ToggleButton
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.google.android.material.switchmaterial.SwitchMaterial
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var tvIpAddress: TextView
     private lateinit var tvStatus: TextView
-    private lateinit var switchMjpeg: Switch
+    private lateinit var switchMjpeg: SwitchMaterial
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
     private lateinit var tvStorage: TextView
@@ -36,6 +36,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var switchContinuous: SwitchCompat
 
     private lateinit var switchMotion: SwitchCompat
+
+    // 记录上次返回键按下的时间
+    private var lastBackPressedTime = 0L
 
     private val prefs by lazy { getSharedPreferences("camera_prefs", MODE_PRIVATE) }
 
@@ -164,6 +167,21 @@ class MainActivity : AppCompatActivity() {
         // 初始UI状态
         updateUI(isServiceRunning())
         updateStorageInfo()
+
+        // 使用 OnBackPressedDispatcher 处理返回键（兼容 Android 13+）
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastBackPressedTime < 2000) {
+                    // 2秒内连续按两次，将应用退到后台（相当于回到桌面）
+                    moveTaskToBack(true)
+                } else {
+                    // 第一次按下，显示提示
+                    Toast.makeText(this@MainActivity, "再按一次返回桌面", Toast.LENGTH_SHORT).show()
+                    lastBackPressedTime = currentTime
+                }
+            }
+        })
     }
 
     // 辅助方法：保存模式并发送广播

@@ -72,7 +72,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:max="30"
+                        android:max="16"
                         android:progress="10"
                         android:layout_marginEnd="16dp" />
 
@@ -265,10 +265,12 @@
                             android:textColor="@color/text_secondary" />
                     </LinearLayout>
 
-                    <Switch
+                    <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/switchBootStart"
                         android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
+                        android:layout_height="wrap_content"
+                        app:thumbTint="@color/thumb_tint"
+                        app:trackTint="@color/track_tint" />
                 </LinearLayout>
 
                 <!-- 监控时间限制 -->
