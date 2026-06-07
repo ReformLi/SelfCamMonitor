@@ -1,6 +1,5 @@
-package com.hpu.selfcammonitor
+package com.hpu.selfcammonitor.ui.settings
 
-import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.ImageFormat
@@ -20,7 +19,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.switchmaterial.SwitchMaterial
-
+import com.hpu.selfcammonitor.R
+import com.hpu.selfcammonitor.service.CameraService
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var prefs: SharedPreferences
@@ -91,20 +91,20 @@ class SettingsActivity : AppCompatActivity() {
         etPassword.setText(prefs.getString("http_pass", ""))
 
         // 加载运动录像时长（秒）
-        val motionSec = prefs.getInt("motion_clip_sec", CameraService.DEFAULT_MOTION_CLIP_SEC)
+        val motionSec = prefs.getInt("motion_clip_sec", CameraService.Companion.DEFAULT_MOTION_CLIP_SEC)
         val motionValues = resources.getStringArray(R.array.motion_duration_values)
         val motionIndex = motionValues.indexOf(motionSec.toString())
         if (motionIndex >= 0) spinnerMotionDuration.setSelection(motionIndex)
 
 // 加载连续录像分段时长（秒）
-        val continuousSec = prefs.getInt("continuous_segment_sec", CameraService.DEFAULT_CONTINUOUS_SEGMENT_SEC)
+        val continuousSec = prefs.getInt("continuous_segment_sec", CameraService.Companion.DEFAULT_CONTINUOUS_SEGMENT_SEC)
         val continuousValues = resources.getStringArray(R.array.continuous_duration_values)
         val continuousIndex = continuousValues.indexOf(continuousSec.toString())
         if (continuousIndex >= 0) spinnerContinuousDuration.setSelection(continuousIndex)
     }
 
     private fun loadSupportedResolutions() {
-        val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        val cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
         val resolutionItems = mutableListOf<String>()
 
         try {

@@ -1,9 +1,13 @@
-package com.hpu.selfcammonitor
+package com.hpu.selfcammonitor.manager
 
 import android.util.Log
-import okhttp3.*
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.json.JSONObject
 import java.io.IOException
 

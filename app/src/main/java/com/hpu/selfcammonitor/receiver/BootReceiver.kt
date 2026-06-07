@@ -1,9 +1,10 @@
-package com.hpu.selfcammonitor
+package com.hpu.selfcammonitor.receiver
 
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.hpu.selfcammonitor.service.CameraService
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

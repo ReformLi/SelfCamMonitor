@@ -1,15 +1,10 @@
-package com.hpu.selfcammonitor
+package com.hpu.selfcammonitor.service
 
-import android.graphics.Bitmap
-import android.graphics.Color
-import android.util.Log
 import fi.iki.elonen.NanoHTTPD
-import java.io.ByteArrayOutputStream
-import java.io.OutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
 import android.util.Base64
-import java.io.ByteArrayInputStream
+import com.hpu.selfcammonitor.utils.MJPEGStreamer
 
 class StreamServer(port: Int = 8080) : NanoHTTPD(port) {
 
@@ -65,7 +60,7 @@ class StreamServer(port: Int = 8080) : NanoHTTPD(port) {
 
             return newChunkedResponse(
                 Response.Status.OK,
-                "multipart/x-mixed-replace; boundary=${MJPEGStreamer.BOUNDARY}",
+                "multipart/x-mixed-replace; boundary=${MJPEGStreamer.Companion.BOUNDARY}",
                 pipedIn
             )
         }

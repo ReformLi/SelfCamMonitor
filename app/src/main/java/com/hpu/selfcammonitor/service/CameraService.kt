@@ -1,6 +1,7 @@
-package com.hpu.selfcammonitor
+package com.hpu.selfcammonitor.service
 
 import android.Manifest
+import android.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -21,6 +22,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import android.util.Size
 import android.view.Surface
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -38,11 +40,16 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.hpu.selfcammonitor.manager.AlertManager
+import com.hpu.selfcammonitor.utils.MJPEGStreamer
+import com.hpu.selfcammonitor.utils.MotionDetector
+import com.hpu.selfcammonitor.ui.MainActivity
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ExecutorService
@@ -266,7 +273,7 @@ class CameraService : LifecycleService() {
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("监控运行中")
             .setContentText("访问: http://$ip:8080/video")
-            .setSmallIcon(android.R.drawable.ic_menu_camera)
+            .setSmallIcon(R.drawable.ic_menu_camera)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
@@ -295,7 +302,7 @@ class CameraService : LifecycleService() {
             // 1. 图像分析（MJPEG源 + 运动检测）
             val imageAnalysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .setTargetResolution(android.util.Size(targetWidth, targetHeight))
+                .setTargetResolution(Size(targetWidth, targetHeight))
                 .build()
 
             imageAnalysis.setAnalyzer(cameraExecutor, ImageAnalysis.Analyzer { imageProxy ->
@@ -394,8 +401,8 @@ class CameraService : LifecycleService() {
         val start = monitorStart ?: return true  // 为空时无限制，全天
         val end = monitorEnd ?: return true  // 为空时无限制，全天
         if (start == end) return true  // 前后时间相等时 无限制，全天
-        val now = java.util.Calendar.getInstance()
-        val currentMinutes = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
+        val now = Calendar.getInstance()
+        val currentMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
 
         val startParts = start.split(":")
         val startMinutes = startParts[0].toInt() * 60 + startParts[1].toInt()
@@ -413,7 +420,7 @@ class CameraService : LifecycleService() {
     // 放在 CameraService 类内部
     private fun imageToNv21(image: ImageProxy): ByteArray? {
         // 复用安全转换逻辑（参考 MotionDetector 或 MJPEGStreamer 中的实现）
-        return MJPEGStreamer.yuv420888ToNv21(image) // 若已为 public
+        return MJPEGStreamer.Companion.yuv420888ToNv21(image) // 若已为 public
     }
 
     private fun startClipRecording() {

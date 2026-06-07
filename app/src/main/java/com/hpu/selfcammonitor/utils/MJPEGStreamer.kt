@@ -1,4 +1,4 @@
-package com.hpu.selfcammonitor
+package com.hpu.selfcammonitor.utils
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -7,6 +7,7 @@ import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.YuvImage
 import android.util.Log
+import androidx.camera.core.ImageProxy
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -17,7 +18,7 @@ class MJPEGStreamer {
         const val BOUNDARY = "MYBOUNDARY"
         private const val TAG = "MJPEGStreamer"
 
-        fun yuv420888ToNv21(image: androidx.camera.core.ImageProxy): ByteArray? {
+        fun yuv420888ToNv21(image: ImageProxy): ByteArray? {
             // ... 保持原有正确实现（不变）...
             val width = image.width
             val height = image.height
@@ -115,7 +116,7 @@ class MJPEGStreamer {
      * 将 ImageProxy 转为 JPEG，并根据旋转角度校正方向。
      * 方案：先编码成 JPEG，再旋转 JPEG（避免 NV21 旋转的颜色问题）
      */
-    fun imageToJpeg(image: androidx.camera.core.ImageProxy, quality: Int = 70): ByteArray? {
+    fun imageToJpeg(image: ImageProxy, quality: Int = 70): ByteArray? {
         val rotation = image.imageInfo.rotationDegrees
         Log.v(TAG, "imageToJpeg rotation=$rotation")
 

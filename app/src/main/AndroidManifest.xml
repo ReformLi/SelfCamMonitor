@@ -41,12 +41,12 @@
         android:theme="@style/Theme.SelfCamMonitor"
         android:usesCleartextTraffic="true">
         <activity
-            android:name=".SettingsActivity"
+            android:name=".ui.settings.SettingsActivity"
             android:exported="false" />
         <activity
-            android:name=".RecordingsActivity"
+            android:name=".ui.recordings.RecordingsActivity"
             android:exported="false" /> <!-- 允许 HTTP -->
-        <activity android:name=".VideoListActivity" />
+        <activity android:name=".ui.video.VideoListActivity" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -58,7 +58,7 @@
         </provider>
 
         <activity
-            android:name=".MainActivity"
+            android:name=".ui.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -68,12 +68,12 @@
         </activity>
 
         <service
-            android:name=".CameraService"
+            android:name=".service.CameraService"
             android:exported="false"
             android:foregroundServiceType="camera" />
 
         <receiver
-            android:name=".BootReceiver"
+            android:name=".receiver.BootReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

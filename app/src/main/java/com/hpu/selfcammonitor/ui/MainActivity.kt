@@ -1,6 +1,7 @@
-package com.hpu.selfcammonitor
+package com.hpu.selfcammonitor.ui
 
 import android.Manifest
+import android.app.ActivityManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -9,6 +10,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Button
 import android.widget.ImageButton
@@ -21,6 +23,10 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.switchmaterial.SwitchMaterial
+import com.hpu.selfcammonitor.service.CameraService
+import com.hpu.selfcammonitor.R
+import com.hpu.selfcammonitor.ui.recordings.RecordingsActivity
+import com.hpu.selfcammonitor.ui.settings.SettingsActivity
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
@@ -113,13 +119,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 加载保存的录像模式
-        val savedMode = prefs.getInt("record_mode", CameraService.MODE_PREVIEW_ONLY)
+        val savedMode = prefs.getInt("record_mode", CameraService.Companion.MODE_PREVIEW_ONLY)
         when (savedMode) {
-            CameraService.MODE_CONTINUOUS -> {
+            CameraService.Companion.MODE_CONTINUOUS -> {
                 switchContinuous.isChecked = true
                 switchMotion.isChecked = false
             }
-            CameraService.MODE_MOTION_TRIGGERED -> {
+            CameraService.Companion.MODE_MOTION_TRIGGERED -> {
                 switchContinuous.isChecked = false
                 switchMotion.isChecked = true
             }
@@ -133,11 +139,11 @@ class MainActivity : AppCompatActivity() {
         switchContinuous.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 if (switchMotion.isChecked) switchMotion.isChecked = false
-                saveAndNotifyMode(CameraService.MODE_CONTINUOUS)
+                saveAndNotifyMode(CameraService.Companion.MODE_CONTINUOUS)
             } else {
                 // 如果两个都关闭，则为预览模式
                 if (!switchMotion.isChecked) {
-                    saveAndNotifyMode(CameraService.MODE_PREVIEW_ONLY)
+                    saveAndNotifyMode(CameraService.Companion.MODE_PREVIEW_ONLY)
                 }
             }
         }
@@ -145,10 +151,10 @@ class MainActivity : AppCompatActivity() {
         switchMotion.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 if (switchContinuous.isChecked) switchContinuous.isChecked = false
-                saveAndNotifyMode(CameraService.MODE_MOTION_TRIGGERED)
+                saveAndNotifyMode(CameraService.Companion.MODE_MOTION_TRIGGERED)
             } else {
                 if (!switchContinuous.isChecked) {
-                    saveAndNotifyMode(CameraService.MODE_PREVIEW_ONLY)
+                    saveAndNotifyMode(CameraService.Companion.MODE_PREVIEW_ONLY)
                 }
             }
         }
@@ -225,7 +231,7 @@ class MainActivity : AppCompatActivity() {
     // ---------- 电池优化 ----------
     private fun requestIgnoreBatteryOptimizations() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val powerManager = getSystemService(POWER_SERVICE) as android.os.PowerManager
+            val powerManager = getSystemService(POWER_SERVICE) as PowerManager
             if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
                 val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                     data = Uri.parse("package:$packageName")
@@ -258,7 +264,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun isServiceRunning(): Boolean {
-        val manager = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+        val manager = getSystemService(ACTIVITY_SERVICE) as ActivityManager
         for (service in manager.getRunningServices(Integer.MAX_VALUE)) {
             if (CameraService::class.java.name == service.service.className) {
                 return true
@@ -303,13 +309,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        updateStorageInfo()
+    }
+
     private fun updateStorageInfo() {
         val dir = File(getExternalFilesDir(null), "Recordings")
         val totalSize = if (dir.exists()) {
-            dir.listFiles()?.sumOf { it.length() } ?: 0
+            dir.walkTopDown()
+                .filter { it.isFile && it.extension.equals("mp4", ignoreCase = true) }
+                .sumOf { it.length() }
         } else 0L
         val sizeMB = totalSize / (1024 * 1024)
-        tvStorage.text = "录像存储: ${sizeMB} MB"
+        tvStorage.text = "录像存储: $sizeMB MB"
     }
 
 }

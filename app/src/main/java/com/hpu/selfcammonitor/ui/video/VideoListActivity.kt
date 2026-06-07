@@ -1,17 +1,23 @@
-package com.hpu.selfcammonitor
+package com.hpu.selfcammonitor.ui.video
 
 import android.app.ProgressDialog
+import android.content.Intent
 import android.media.MediaMetadataRetriever
+import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
-import android.view.LayoutInflater
+import android.util.Log
 import android.view.View
-import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
-import android.widget.*
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
@@ -19,10 +25,12 @@ import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.hpu.selfcammonitor.R
 import java.io.File
+import java.io.FileInputStream
 import java.text.SimpleDateFormat
-import java.util.*
-import kotlin.collections.HashMap
+import java.util.Date
+import java.util.Locale
 
 class VideoListActivity : AppCompatActivity() {
 
@@ -57,7 +65,7 @@ class VideoListActivity : AppCompatActivity() {
     private lateinit var folderPath: String
 
     private val pickDocumentLauncher = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
+        ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         uri?.let { exportSelectedVideos(it) }
     }
@@ -198,21 +206,33 @@ class VideoListActivity : AppCompatActivity() {
 
     private fun setupAdapter() {
         adapter = VideoAdapter(
-            currentVideos,
-            onVideoClick = { video ->
-                if (isSelectMode) toggleSelection(video)
-                else playVideo(video)
+            inflater = layoutInflater,
+            videos = currentVideos,
+            onVideoPlayClick = { video ->       // 普通模式点击播放
+                if (!isSelectMode) {
+                    playVideo(video)
+                }
             },
-            onVideoLongClick = { video ->
+            onEnterSelectMode = { video ->     // 长按进入多选模式
                 if (!isSelectMode) {
                     enterSelectMode(video)
-                    true
-                } else false
+                }
             }
         )
+
+        // 设置选中数量变化回调
+        adapter.onSelectionChanged = { count ->
+            runOnUiThread {
+                updateSelectedCount()
+                updateDeleteButton()
+            }
+        }
+
+        // 同步初始状态
         adapter.isSelectMode = isSelectMode
         adapter.selectedVideos = selectedVideos
         adapter.updateMetadata(dateTimeMap, durationMap)
+
         recyclerView.adapter = adapter
         updateFileCountDisplay()
     }
@@ -272,6 +292,7 @@ class VideoListActivity : AppCompatActivity() {
                 selectedVideos.addAll(currentVideos)
             }
             adapter.selectedVideos = selectedVideos
+            adapter.onSelectionChanged?.invoke(selectedVideos.size)
             adapter.notifyDataSetChanged()
             updateSelectedCount()
             updateDeleteButton()
@@ -283,12 +304,13 @@ class VideoListActivity : AppCompatActivity() {
     }
 
     private fun enterSelectMode(firstVideo: File) {
+        isSelectMode = true
         selectedVideos.clear()
         selectedVideos.add(firstVideo)
-        isSelectMode = true
         adapter.isSelectMode = true
         adapter.selectedVideos = selectedVideos
-        adapter.notifyDataSetChanged()
+        adapter.onSelectionChanged?.invoke(selectedVideos.size)
+        adapter.notifyDataSetChanged()   // 刷新所有 item 以切换点击模式
         showSelectUI()
         updateSelectedCount()
         updateDeleteButton()
@@ -299,6 +321,7 @@ class VideoListActivity : AppCompatActivity() {
         selectedVideos.clear()
         adapter.isSelectMode = false
         adapter.selectedVideos = selectedVideos
+        adapter.onSelectionChanged?.invoke(0)
         adapter.notifyDataSetChanged()
         hideSelectUI()
     }
@@ -316,7 +339,7 @@ class VideoListActivity : AppCompatActivity() {
         val count = selectedVideos.size
         tvSelectedCount.text = "已选 $count 项"
         // 调试日志
-        android.util.Log.d("VideoList", "选中数量: $count")
+        Log.d("VideoList", "选中数量: $count")
     }
 
     private fun updateDeleteButton() {
@@ -395,7 +418,7 @@ class VideoListActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun exportSelectedVideos(treeUri: android.net.Uri) {
+    private fun exportSelectedVideos(treeUri: Uri) {
         if (selectedVideos.isEmpty()) return
         val progress = ProgressDialog(this)
         progress.setMessage("正在导出 ${selectedVideos.size} 个视频...")
@@ -432,7 +455,7 @@ class VideoListActivity : AppCompatActivity() {
     private fun copyFileToDocument(sourceFile: File, rootDocument: DocumentFile?): Boolean {
         return try {
             val destFile = rootDocument?.createFile("video/mp4", sourceFile.name) ?: return false
-            val sourceStream = java.io.FileInputStream(sourceFile)
+            val sourceStream = FileInputStream(sourceFile)
             val destStream = contentResolver.openOutputStream(destFile.uri) ?: return false
             val buffer = ByteArray(8192)
             var bytesRead: Int
@@ -449,63 +472,10 @@ class VideoListActivity : AppCompatActivity() {
 
     private fun playVideo(file: File) {
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+        val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "video/mp4")
-            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(android.content.Intent.createChooser(intent, "播放视频"))
-    }
-
-    // 适配器
-    inner class VideoAdapter(
-        private var videos: List<File>,
-        private val onVideoClick: (File) -> Unit,
-        private val onVideoLongClick: (File) -> Boolean
-    ) : RecyclerView.Adapter<VideoAdapter.VideoViewHolder>() {
-
-        var isSelectMode = false
-        var selectedVideos = mutableSetOf<File>()
-        private var dateTimeMap: Map<File, String> = emptyMap()
-        private var durationMap: Map<File, String> = emptyMap()
-
-        fun updateData(newVideos: List<File>) {
-            videos = newVideos
-            notifyDataSetChanged()
-        }
-
-        fun updateMetadata(dateTime: Map<File, String>, duration: Map<File, String>) {
-            dateTimeMap = dateTime
-            durationMap = duration
-            notifyDataSetChanged()
-        }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VideoViewHolder {
-            val view = LayoutInflater.from(parent.context).inflate(R.layout.item_recording, parent, false)
-            return VideoViewHolder(view)
-        }
-
-        override fun onBindViewHolder(holder: VideoViewHolder, position: Int) {
-            val video = videos[position]
-            holder.tvFileName.text = video.name
-            holder.tvFileSize.text = "${video.length() / 1024} KB"
-            holder.tvDateTime.text = dateTimeMap[video] ?: ""
-            holder.tvDuration.text = durationMap[video] ?: ""
-
-            holder.checkBox.visibility = if (isSelectMode) View.VISIBLE else View.GONE
-            holder.checkBox.isChecked = selectedVideos.contains(video)
-
-            holder.itemView.setOnClickListener { onVideoClick(video) }
-            holder.itemView.setOnLongClickListener { onVideoLongClick(video) }
-        }
-
-        override fun getItemCount() = videos.size
-
-        inner class VideoViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-            val tvFileName: TextView = view.findViewById(android.R.id.text1)
-            val tvFileSize: TextView = view.findViewById(android.R.id.text2)
-            val tvDateTime: TextView = view.findViewById(R.id.tvDateTime)
-            val tvDuration: TextView = view.findViewById(R.id.tvDuration)
-            val checkBox: CheckBox = view.findViewById(R.id.checkbox)
-        }
+        startActivity(Intent.createChooser(intent, "播放视频"))
     }
 }

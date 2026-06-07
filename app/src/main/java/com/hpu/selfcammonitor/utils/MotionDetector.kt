@@ -1,11 +1,13 @@
-package com.hpu.selfcammonitor
+package com.hpu.selfcammonitor.utils
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.YuvImage
 import androidx.camera.core.ImageProxy
 import java.io.ByteArrayOutputStream
+import kotlin.math.abs
 
 class MotionDetector {
 
@@ -55,7 +57,7 @@ class MotionDetector {
         var diffCount = 0
         val threshold = ((100 - sensitivity) * 2.55).toInt().coerceAtLeast(5) // 将灵敏度映射到差异阈值
         for (i in luma.indices) {
-            if (kotlin.math.abs(luma[i] - prev[i]) > threshold) {
+            if (abs(luma[i] - prev[i]) > threshold) {
                 diffCount++
             }
         }
@@ -126,6 +128,6 @@ class MotionDetector {
         val out = ByteArrayOutputStream()
         yuvImage.compressToJpeg(Rect(0, 0, width, height), 100, out)
         val jpegData = out.toByteArray()
-        return android.graphics.BitmapFactory.decodeByteArray(jpegData, 0, jpegData.size)
+        return BitmapFactory.decodeByteArray(jpegData, 0, jpegData.size)
     }
 }
