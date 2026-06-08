@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -33,7 +34,7 @@ class RecordingsActivity : AppCompatActivity() {
     private lateinit var btnDelete: Button
     private lateinit var btnExport: Button
     private lateinit var buttonCard: LinearLayout
-
+    private lateinit var btnBack: ImageButton
     private var folderList: List<File> = emptyList()
     private var isSelectMode = false
     private val selectedFolders = mutableSetOf<File>()
@@ -55,6 +56,15 @@ class RecordingsActivity : AppCompatActivity() {
         btnDelete = findViewById(R.id.btnDelete)
         btnExport = findViewById(R.id.btnExport)
         buttonCard = findViewById(R.id.buttonCard)
+        // 绑定返回按钮
+        btnBack = findViewById(R.id.btnBack)
+        btnBack.setOnClickListener {
+            if (isSelectMode) {
+                exitSelectMode()
+            } else {
+                finish()
+            }
+        }
 
         loadFolderList()
         setupAdapter()
@@ -154,6 +164,7 @@ class RecordingsActivity : AppCompatActivity() {
     }
 
     private fun showSelectUI() {
+        btnBack.visibility = View.GONE
         tvFileCount.visibility = View.GONE
         btnSelectAll.visibility = View.VISIBLE
         tvSelectedCount.visibility = View.VISIBLE
@@ -163,6 +174,7 @@ class RecordingsActivity : AppCompatActivity() {
     }
 
     private fun hideSelectUI() {
+        btnBack.visibility = View.VISIBLE
         tvFileCount.visibility = View.VISIBLE
         btnSelectAll.visibility = View.GONE
         tvSelectedCount.visibility = View.GONE

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -12,17 +13,26 @@
     <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
+        android:layout_margin="12dp"
         app:cardCornerRadius="8dp"
         app:cardElevation="2dp">
 
-        <LinearLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
             android:paddingHorizontal="12dp"
-            android:paddingVertical="16dp"
-            android:gravity="center_vertical">
+            android:paddingVertical="16dp">
+
+            <!-- 返回按钮 -->
+            <ImageButton
+                android:id="@+id/btnBack"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:src="@drawable/ic_menu_revert"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="返回"
+                android:visibility="visible"
+                tools:ignore="MissingConstraints" />
 
             <!-- 全选按钮（多选模式显示） -->
             <Button
@@ -32,34 +42,12 @@
                 android:text="全选"
                 android:textSize="14sp"
                 android:visibility="gone"
-                style="@style/Widget.Material3.Button.TextButton" />
+                style="@style/Widget.Material3.Button.TextButton"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
 
-            <!-- 文件计数（普通模式显示） -->
-            <TextView
-                android:id="@+id/tvFileCount"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="共 0 个文件夹"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_primary"
-                android:gravity="center"
-                android:visibility="visible" />
-
-            <!-- 选中计数（多选模式显示） -->
-            <TextView
-                android:id="@+id/tvSelectedCount"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="已选 0 项"
-                android:textSize="16sp"
-                android:textColor="@color/text_primary"
-                android:gravity="center"
-                android:visibility="gone" />
-
-            <!-- 取消按钮（多选模式显示） -->
+            <!-- 取消按钮 -->
             <Button
                 android:id="@+id/btnCancelSelect"
                 android:layout_width="wrap_content"
@@ -67,9 +55,40 @@
                 android:text="取消"
                 android:textSize="14sp"
                 style="@style/Widget.Material3.Button.TextButton"
-                android:visibility="gone" />
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
 
-        </LinearLayout>
+            <!-- 文件计数（普通模式显示） -->
+            <TextView
+                android:id="@+id/tvFileCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="共 0 个文件夹"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:visibility="visible"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <!-- 选中计数（多选模式显示） -->
+            <TextView
+                android:id="@+id/tvSelectedCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="已选 0 项"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:visibility="gone"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
     </androidx.cardview.widget.CardView>
 
     <!-- 录像列表 -->
@@ -78,7 +97,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:padding="8dp" />
+        android:padding="4dp" />
 
     <!-- 底部按钮容器（多选模式显示） -->
     <LinearLayout

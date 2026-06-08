@@ -11,27 +11,28 @@
     <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
+        android:layout_margin="12dp"
         app:cardCornerRadius="8dp"
         app:cardElevation="2dp">
 
-        <LinearLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
             android:paddingHorizontal="12dp"
-            android:paddingVertical="16dp"
-            android:gravity="center_vertical">
+            android:paddingVertical="16dp">
 
             <!-- 返回按钮（普通模式） -->
             <ImageButton
                 android:id="@+id/btnBack"
                 android:layout_width="32dp"
                 android:layout_height="32dp"
-                android:src="@android:drawable/ic_menu_revert"
+                android:src="@drawable/ic_menu_revert"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="返回"
-                android:visibility="visible" />
+                android:visibility="visible"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
 
             <!-- 全选按钮（多选模式） -->
             <Button
@@ -41,32 +42,10 @@
                 android:text="全选"
                 android:textSize="14sp"
                 android:visibility="gone"
-                style="@style/Widget.Material3.Button.TextButton" />
-
-            <!-- 标题（普通模式） -->
-            <TextView
-                android:id="@+id/tvTitle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="视频列表"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_primary"
-                android:gravity="center"
-                android:paddingStart="8dp" />
-
-            <!-- 选中计数（多选模式） -->
-            <TextView
-                android:id="@+id/tvSelectedCount"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="已选 0 项"
-                android:textSize="16sp"
-                android:textColor="@color/text_primary"
-                android:gravity="center"
-                android:visibility="gone" />
+                style="@style/Widget.Material3.Button.TextButton"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
 
             <!-- 文件数量（普通模式） -->
             <TextView
@@ -76,7 +55,11 @@
                 android:text="共 0 个视频"
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary"
-                android:paddingHorizontal="8dp" />
+                android:paddingHorizontal="8dp"
+                android:visibility="visible"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
 
             <!-- 取消按钮（多选模式） -->
             <Button
@@ -86,8 +69,43 @@
                 android:text="取消"
                 android:textSize="14sp"
                 style="@style/Widget.Material3.Button.TextButton"
-                android:visibility="gone" />
-        </LinearLayout>
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <!-- 标题（普通模式） -->
+            <TextView
+                android:id="@+id/tvTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:text="视频列表"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:gravity="center"
+                android:visibility="visible"
+                app:layout_constraintStart_toEndOf="@+id/btnBack"
+                app:layout_constraintEnd_toStartOf="@+id/tvFileCount"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <!-- 选中计数（多选模式） -->
+            <TextView
+                android:id="@+id/tvSelectedCount"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:text="已选 0 项"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:gravity="center"
+                android:visibility="gone"
+                app:layout_constraintStart_toEndOf="@+id/btnSelectAll"
+                app:layout_constraintEnd_toStartOf="@+id/btnCancelSelect"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
     </androidx.cardview.widget.CardView>
 
     <!-- 搜索栏（始终显示） -->
@@ -95,8 +113,10 @@
         android:id="@+id/searchBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="8dp"
-        android:layout_marginBottom="8dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginTop="0dp"
+        android:layout_marginBottom="4dp"
         app:cardCornerRadius="8dp"
         app:cardElevation="2dp"
         android:visibility="visible">
@@ -149,7 +169,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:padding="8dp" />
+        android:padding="4dp" />
 
     <!-- 底部按钮容器（多选模式显示） -->
     <LinearLayout
