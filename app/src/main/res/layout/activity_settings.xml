@@ -162,6 +162,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="number"
+                    android:minHeight="48dp"
+                    android:gravity="center_vertical"
+                    android:paddingStart="12dp"
                     android:text="30"
                     android:hint="30"
                     android:layout_marginBottom="16dp" />
@@ -179,7 +182,10 @@
                     android:id="@+id/etAlertUrl"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="http://192.168.1.100:3000/motion"
+                    android:minHeight="48dp"
+                    android:gravity="center_vertical"
+                    android:paddingStart="12dp"
+                    android:hint="http://127.0.0.1:3000/motion"
                     android:inputType="textUri" />
 
                 <!-- 运动录像时长 -->
@@ -310,6 +316,9 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        android:minHeight="48dp"
+                        android:gravity="center_vertical"
+                        android:paddingStart="12dp"
                         android:hint="00:00"
                         android:inputType="time"
                         android:layout_marginEnd="16dp" />
@@ -327,6 +336,9 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        android:minHeight="48dp"
+                        android:gravity="center_vertical"
+                        android:paddingStart="12dp"
                         android:hint="23:59"
                         android:inputType="time" />
                 </LinearLayout>
