@@ -24,8 +24,8 @@
             <!-- 返回按钮（普通模式） -->
             <ImageButton
                 android:id="@+id/btnBack"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:src="@drawable/ic_menu_revert"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="返回"
@@ -141,7 +141,8 @@
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_hint"
                 android:background="@null"
-                android:paddingVertical="8dp" />
+                android:minHeight="48dp"
+                android:paddingVertical="16dp" />
 
             <ImageButton
                 android:id="@+id/btnClearSearch"

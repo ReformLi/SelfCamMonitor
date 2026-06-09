@@ -49,6 +49,9 @@
                     android:id="@+id/spinnerResolution"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:paddingVertical="8dp"
+                    android:gravity="center_vertical"
                     android:layout_marginBottom="16dp" />
 
                 <!-- 推流帧率 -->
@@ -194,6 +197,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:entries="@array/motion_duration_labels"
+                    android:minHeight="48dp"
+                    android:paddingVertical="8dp"
+                    android:gravity="center_vertical"
                     android:layout_marginBottom="16dp" />
 
                 <!-- 连续录像分段时长 -->
@@ -209,6 +215,9 @@
                     android:id="@+id/spinner_continuous_duration"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:paddingVertical="8dp"
+                    android:gravity="center_vertical"
                     android:entries="@array/continuous_duration_labels" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>

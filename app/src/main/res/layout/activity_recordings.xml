@@ -26,8 +26,8 @@
             <!-- 返回按钮 -->
             <ImageButton
                 android:id="@+id/btnBack"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:src="@drawable/ic_menu_revert"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="返回"
