@@ -12,6 +12,7 @@
         android:name="android.permission.FOREGROUND_SERVICE"
         tools:ignore="ForegroundServicesPolicy" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" /> <!-- 别忘了唤醒锁 -->
     <uses-permission android:name="android.permission.INTERNET" /> <!-- 获取 WiFi IP -->
@@ -70,7 +71,7 @@
         <service
             android:name=".service.CameraService"
             android:exported="false"
-            android:foregroundServiceType="camera" />
+            android:foregroundServiceType="camera|microphone" />
 
         <receiver
             android:name=".receiver.BootReceiver"
