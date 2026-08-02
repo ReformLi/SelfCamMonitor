@@ -1,16 +1,16 @@
 package com.hpu.selfcammonitor.utils
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
-import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.YuvImage
 import android.util.Log
 import androidx.camera.core.ImageProxy
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 
 class MJPEGStreamer {
 
@@ -19,7 +19,6 @@ class MJPEGStreamer {
         private const val TAG = "MJPEGStreamer"
 
         fun yuv420888ToNv21(image: ImageProxy): ByteArray? {
-            // ... 保持原有正确实现（不变）...
             val width = image.width
             val height = image.height
             val yPlane = image.planes[0]
@@ -68,12 +67,111 @@ class MJPEGStreamer {
             }
             return nv21
         }
+
+        /**
+         * 旋转 NV21 数据。只支持 0/90/180/270 度。
+         * 返回 Pair(旋转后的 nv21, 新的宽度)，新高度可通过长度反推。
+         */
+        fun rotateNv21(nv21: ByteArray, width: Int, height: Int, rotation: Int): Pair<ByteArray, Int> {
+            return when (rotation % 360) {
+                90 -> rotateNv2190(nv21, width, height) to height
+                180 -> rotateNv21180(nv21, width, height) to width
+                270 -> rotateNv21270(nv21, width, height) to height
+                else -> nv21 to width
+            }
+        }
+
+        // NV21 顺时针旋转 90 度
+        private fun rotateNv2190(src: ByteArray, width: Int, height: Int): ByteArray {
+            val dst = ByteArray(src.size)
+            val ySize = width * height
+            // 旋转 Y
+            var dstIdx = 0
+            for (x in 0 until width) {
+                for (y in height - 1 downTo 0) {
+                    dst[dstIdx++] = src[y * width + x]
+                }
+            }
+            // 旋转 VU (chroma)
+            val srcChromaStart = ySize
+            var dstChromaIdx = ySize
+            val cw = width / 2
+            val ch = height / 2
+            for (x in 0 until cw) {
+                for (y in ch - 1 downTo 0) {
+                    val srcIdx = srcChromaStart + y * cw * 2 + x * 2
+                    dst[dstChromaIdx++] = src[srcIdx]       // V
+                    dst[dstChromaIdx++] = src[srcIdx + 1]   // U
+                }
+            }
+            return dst
+        }
+
+        // NV21 旋转 180 度
+        private fun rotateNv21180(src: ByteArray, width: Int, height: Int): ByteArray {
+            val dst = ByteArray(src.size)
+            val ySize = width * height
+            // 旋转 Y
+            var dstIdx = 0
+            for (y in height - 1 downTo 0) {
+                for (x in width - 1 downTo 0) {
+                    dst[dstIdx++] = src[y * width + x]
+                }
+            }
+            // 旋转 VU
+            var srcIdx = ySize
+            var dstChromaIdx = dst.size
+            val cw = width / 2
+            val ch = height / 2
+            val chromaSize = cw * ch * 2
+            srcIdx = ySize + chromaSize
+            while (dstChromaIdx > ySize) {
+                dst[--dstChromaIdx] = src[--srcIdx] // U
+                dst[--dstChromaIdx] = src[--srcIdx] // V
+            }
+            return dst
+        }
+
+        // NV21 顺时针旋转 270 度（= 逆时针 90 度）
+        private fun rotateNv21270(src: ByteArray, width: Int, height: Int): ByteArray {
+            val dst = ByteArray(src.size)
+            val ySize = width * height
+            // 旋转 Y
+            var dstIdx = 0
+            for (x in width - 1 downTo 0) {
+                for (y in 0 until height) {
+                    dst[dstIdx++] = src[y * width + x]
+                }
+            }
+            // 旋转 VU
+            var dstChromaIdx = ySize
+            val cw = width / 2
+            val ch = height / 2
+            for (x in cw - 1 downTo 0) {
+                for (y in 0 until ch) {
+                    val srcIdx = ySize + y * cw * 2 + x * 2
+                    dst[dstChromaIdx++] = src[srcIdx]
+                    dst[dstChromaIdx++] = src[srcIdx + 1]
+                }
+            }
+            return dst
+        }
     }
 
-    private val clients = ConcurrentLinkedQueue<OutputStream>()
+    // 每个客户端独立的输出流 + 线程
+    private data class ClientInfo(
+        val outputStream: OutputStream,
+        val pendingFrame: AtomicReference<ByteArray?> = AtomicReference(null)
+    )
+
+    private val clients = ConcurrentHashMap<OutputStream, ClientInfo>()
+    private val pushExecutor: ExecutorService = Executors.newCachedThreadPool()
 
     fun addClient(outputStream: OutputStream) {
-        clients.add(outputStream)
+        val info = ClientInfo(outputStream)
+        clients[outputStream] = info
+        // 为每个客户端启动一个推送线程
+        pushExecutor.submit { clientPushLoop(info) }
         Log.d(TAG, "addClient done, total=${clients.size}")
     }
 
@@ -83,6 +181,38 @@ class MJPEGStreamer {
         try { outputStream.close() } catch (_: Exception) {}
     }
 
+    /**
+     * 每个客户端独立的推送循环。
+     * 使用 AtomicReference 存最新帧：新帧来了直接覆盖旧帧，丢弃慢帧。
+     */
+    private fun clientPushLoop(info: ClientInfo) {
+        try {
+            while (clients.containsValue(info)) {
+                val frameBytes = info.pendingFrame.getAndSet(null)
+                if (frameBytes != null) {
+                    try {
+                        info.outputStream.write(frameBytes)
+                        info.outputStream.flush()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Client write failed, removing")
+                        removeClient(info.outputStream)
+                        return
+                    }
+                } else {
+                    // 没有新帧，短暂等待
+                    Thread.sleep(5)
+                }
+            }
+        } catch (_: InterruptedException) {
+        } finally {
+            try { info.outputStream.close() } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * 将一帧推送给所有客户端。
+     * 只更新每个客户端的 pendingFrame，不阻塞。
+     */
     fun pushFrame(jpegData: ByteArray) {
         if (clients.isEmpty()) return
         if (jpegData.size < 1000) {
@@ -98,49 +228,36 @@ class MJPEGStreamer {
         System.arraycopy(headerBytes, 0, frameBytes, 0, headerBytes.size)
         System.arraycopy(jpegData, 0, frameBytes, headerBytes.size, jpegData.size)
 
-        val iterator = clients.iterator()
-        while (iterator.hasNext()) {
-            val client = iterator.next()
-            try {
-                client.write(frameBytes)
-                client.flush()
-            } catch (e: Exception) {
-                Log.w(TAG, "Client disconnected, removing")
-                iterator.remove()
-                try { client.close() } catch (_: Exception) {}
-            }
+        // 只更新引用，不阻塞写
+        clients.values.forEach { info ->
+            info.pendingFrame.set(frameBytes)
         }
     }
 
     /**
      * 将 ImageProxy 转为 JPEG，并根据旋转角度校正方向。
-     * 方案：先编码成 JPEG，再旋转 JPEG（避免 NV21 旋转的颜色问题）
+     * 优化方案：在 NV21 层面旋转，只做一次 JPEG 编码。
      */
-    fun imageToJpeg(image: ImageProxy, quality: Int = 70): ByteArray? {
+    fun imageToJpeg(image: ImageProxy, quality: Int = 60): ByteArray? {
         val rotation = image.imageInfo.rotationDegrees
-        Log.v(TAG, "imageToJpeg rotation=$rotation")
+        val width = image.width
+        val height = image.height
 
-        // 1. YUV -> JPEG（不旋转）
+        // 1. YUV -> NV21
         val nv21 = yuv420888ToNv21(image) ?: return null
-        val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
-        val out = ByteArrayOutputStream()
-        yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), quality, out)
-        var jpegData = out.toByteArray()
 
-        // 2. 如果需要旋转，解码、旋转、再编码
-        if (rotation != 0) {
-            val bitmap = BitmapFactory.decodeByteArray(jpegData, 0, jpegData.size)
-            val matrix = Matrix()
-            matrix.postRotate(rotation.toFloat())
-            val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-            bitmap.recycle()
-
-            val rotatedOut = ByteArrayOutputStream()
-            rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, quality, rotatedOut)
-            rotatedBitmap.recycle()
-            jpegData = rotatedOut.toByteArray()
+        // 2. 在 NV21 层面旋转（纯字节操作，无编解码）
+        val (rotatedNv21, newWidth) = if (rotation != 0) {
+            rotateNv21(nv21, width, height, rotation)
+        } else {
+            nv21 to width
         }
+        val newHeight = if (rotation == 90 || rotation == 270) width else height
 
-        return jpegData
+        // 3. 只做一次 JPEG 编码
+        val yuvImage = YuvImage(rotatedNv21, ImageFormat.NV21, newWidth, newHeight, null)
+        val out = ByteArrayOutputStream()
+        yuvImage.compressToJpeg(Rect(0, 0, newWidth, newHeight), quality, out)
+        return out.toByteArray()
     }
 }

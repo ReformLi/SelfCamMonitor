@@ -177,6 +177,10 @@ class CameraService : LifecycleService() {
         motionClipDurationMs = prefs.getInt("motion_clip_sec", DEFAULT_MOTION_CLIP_SEC) * 1000L
         // 连续录像分段时长（秒转毫秒）
         continuousSegmentDurationMs = prefs.getInt("continuous_segment_sec", DEFAULT_CONTINUOUS_SEGMENT_SEC) * 1000L
+
+        // 帧率控制
+        val fps = prefs.getInt("fps", 10).coerceIn(1, 30)
+        minFrameInterval = 1000L / fps
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -343,7 +347,7 @@ class CameraService : LifecycleService() {
                     }
                     // MJPEG 推流
                     if (mjpegEnabled) {
-                        val jpegData = mjpegStreamer.imageToJpeg(imageProxy, 70)
+                        val jpegData = mjpegStreamer.imageToJpeg(imageProxy, 60)
                         if (jpegData != null) {
                             mjpegStreamer.pushFrame(jpegData)
                         }

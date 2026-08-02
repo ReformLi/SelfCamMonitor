@@ -75,7 +75,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:max="16"
+                        android:max="30"
                         android:progress="10"
                         android:layout_marginEnd="16dp" />
 
