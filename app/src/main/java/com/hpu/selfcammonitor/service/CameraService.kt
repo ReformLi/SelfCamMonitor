@@ -95,6 +95,11 @@ class CameraService : LifecycleService() {
     private var lastFrameTime = 0L
     private var minFrameInterval = 0L // 由 fps 计算
 
+    // 实际帧率统计
+    private var frameCount = 0
+    private var fpsWindowStart = 0L
+    private var currentFps = 0
+
     private val prefs by lazy { getSharedPreferences("camera_prefs", MODE_PRIVATE) }
 
     // 监控时间限制
@@ -323,6 +328,20 @@ class CameraService : LifecycleService() {
                         return@Analyzer
                     }
                     lastFrameTime = now
+
+                    // 统计实际帧率（每秒刷新一次）
+                    frameCount++
+                    if (fpsWindowStart == 0L) {
+                        fpsWindowStart = now
+                    } else if (now - fpsWindowStart >= 1000L) {
+                        currentFps = frameCount
+                        frameCount = 0
+                        fpsWindowStart = now
+                        // 发送帧率给 UI
+                        val fpsIntent = Intent("com.hpu.selfcammonitor.FPS_UPDATE")
+                        fpsIntent.putExtra("fps", currentFps)
+                        LocalBroadcastManager.getInstance(this@CameraService).sendBroadcast(fpsIntent)
+                    }
 
                     // 根据录像模式处理
                     when (recordMode) {

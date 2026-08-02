@@ -37,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
     private lateinit var tvStorage: TextView
+    private lateinit var tvFps: TextView
     private lateinit var btnViewRecordings: Button
 
     private lateinit var switchContinuous: SwitchCompat
@@ -71,6 +72,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 接收帧率更新广播
+    private val fpsReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == "com.hpu.selfcammonitor.FPS_UPDATE") {
+                val fps = intent.getIntExtra("fps", 0)
+                tvFps.text = "帧率: $fps fps"
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -83,6 +94,7 @@ class MainActivity : AppCompatActivity() {
         btnStart = findViewById(R.id.btnStart)
         btnStop = findViewById(R.id.btnStop)
         tvStorage = findViewById(R.id.tvStorage)
+        tvFps = findViewById(R.id.tvFps)
         btnViewRecordings = findViewById(R.id.btnViewRecordings)
 
         switchContinuous = findViewById(R.id.switch_continuous)
@@ -170,6 +182,12 @@ class MainActivity : AppCompatActivity() {
             IntentFilter("com.hpu.selfcammonitor.SERVICE_STATUS")
         )
 
+        // 注册帧率更新广播
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            fpsReceiver,
+            IntentFilter("com.hpu.selfcammonitor.FPS_UPDATE")
+        )
+
         // 初始UI状态
         updateUI(isServiceRunning())
         updateStorageInfo()
@@ -200,6 +218,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(statusReceiver)
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(fpsReceiver)
     }
 
     // ---------- 权限相关 ----------
@@ -281,6 +300,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             tvStatus.text = "服务已停止"
             tvStatus.setTextColor(getColor(android.R.color.holo_red_dark))
+            tvFps.text = "帧率: -- fps"
         }
 
         // 按钮状态控制：运行时启动按钮置灰，停止按钮可用；停止时相反
