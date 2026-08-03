@@ -239,36 +239,33 @@ class MJPEGStreamer {
      * 优化方案：在 NV21 层面旋转，只做一次 JPEG 编码。
      */
     fun imageToJpeg(image: ImageProxy, quality: Int = 60): ByteArray? {
-        val tTotal = System.currentTimeMillis()
-        val rotation = image.imageInfo.rotationDegrees
         val width = image.width
         val height = image.height
 
-        // 1. YUV -> NV21
-        val t0 = System.currentTimeMillis()
+        // 1. YUV -> NV21（本方法同时负责把 ImageProxy 转为可脱离生命周期的字节数组）
         val nv21 = yuv420888ToNv21(image) ?: return null
-        val t1 = System.currentTimeMillis()
+        val rotation = image.imageInfo.rotationDegrees
 
-        // 2. 在 NV21 层面旋转（纯字节操作，无编解码）
+        return nv21ToJpeg(nv21, width, height, rotation, quality)
+    }
+
+    /**
+     * 对已提取的 NV21 字节数组做旋转 + JPEG 编码。
+     * 输入与 ImageProxy 生命周期无关，可放到独立线程执行，避免阻塞相机分析线程。
+     */
+    fun nv21ToJpeg(nv21: ByteArray, width: Int, height: Int, rotation: Int, quality: Int = 60): ByteArray? {
+        // 在 NV21 层面旋转（纯字节操作，无编解码）
         val (rotatedNv21, newWidth) = if (rotation != 0) {
             rotateNv21(nv21, width, height, rotation)
         } else {
             nv21 to width
         }
         val newHeight = if (rotation == 90 || rotation == 270) width else height
-        val t2 = System.currentTimeMillis()
 
-        // 3. 只做一次 JPEG 编码
+        // 只做一次 JPEG 编码
         val yuvImage = YuvImage(rotatedNv21, ImageFormat.NV21, newWidth, newHeight, null)
         val out = ByteArrayOutputStream()
         yuvImage.compressToJpeg(Rect(0, 0, newWidth, newHeight), quality, out)
-        val jpegData = out.toByteArray()
-        val t3 = System.currentTimeMillis()
-
-        Log.d(TAG, "imageToJpeg: size=${width}x${height}, rotation=${rotation}°, " +
-                "yuv2nv21=${t1 - t0}ms, rotate=${t2 - t1}ms, jpeg=${t3 - t2}ms, " +
-                "total=${t3 - t0}ms, outSize=${jpegData.size}B")
-
-        return jpegData
+        return out.toByteArray()
     }
 }

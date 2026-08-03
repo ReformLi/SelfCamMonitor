@@ -16,14 +16,22 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.YuvImage
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.params.StreamConfigurationMap
 import android.media.MediaRecorder
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import android.util.Range
 import android.util.Size
 import android.view.Surface
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -93,15 +101,30 @@ class CameraService : LifecycleService() {
     private var recording: Recording? = null
     private var isRecording = false
 
-    // 帧率限制（每秒平均策略）
+    // 帧率限制（均匀间隔出帧）
     private var targetFps = 10
-    private var secondFrameCount = 0
-    private var secondStartTs = 0L
+    private var nextEmitAt = 0L
 
-    // 实际帧率统计
+    // 独立编码/推流线程池（避免阻塞相机分析线程，提升实际出帧量）
+    private lateinit var encodeExecutor: ExecutorService
+
+    // 实际帧率统计（在编码完成后计数，反映真正推出去的帧）
     private var frameCount = 0
     private var fpsWindowStart = 0L
     private var currentFps = 0
+
+    // 只读诊断：区分「分析收到的原始帧」和「编码推送成功帧」
+    private var diagRawCount = 0      // 分析线程收到的原始帧数（进如分析器起算，不含时间窗外）
+    private var diagPushedCount = 0   // 实际编码并推送给客户端的帧数
+    private var diagWindowStart = 0L
+
+    // 只读诊断：分析线程内「NV21 拷贝 + 限速开销」耗时统计（min/avg/max，按秒汇总）
+    private val diagCopyLock = Any()
+    private var diagCopyCount = 0L
+    private var diagCopySumMs = 0L
+    private var diagCopyMinMs = Long.MAX_VALUE
+    private var diagCopyMaxMs = 0L
+    private var diagThreadName: String = "?"
 
     private val prefs by lazy { getSharedPreferences("camera_prefs", MODE_PRIVATE) }
 
@@ -141,6 +164,7 @@ class CameraService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         cameraExecutor = Executors.newSingleThreadExecutor()
+        encodeExecutor = Executors.newFixedThreadPool(2)
         mjpegStreamer = MJPEGStreamer()
         streamServer = StreamServer(8080)
         streamServer.setMJPEGStreamer(mjpegStreamer)
@@ -268,6 +292,7 @@ class CameraService : LifecycleService() {
         streamServer.stop()
         cameraProvider?.unbindAll()
         cameraExecutor.shutdown()
+        encodeExecutor.shutdown()
         stopClipRecording()
         if (wakeLock.isHeld) wakeLock.release()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(configReceiver)
@@ -321,10 +346,13 @@ class CameraService : LifecycleService() {
             val targetHeight = parts.getOrNull(1)?.toIntOrNull() ?: 480
 
             // 1. 图像分析（MJPEG源 + 运动检测）
-            val imageAnalysis = ImageAnalysis.Builder()
+            val imageAnalysisBuilder = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .setTargetResolution(Size(targetWidth, targetHeight))
-                .build()
+            // 请求相机按 targetFps 出帧（Camera2 interop 设置 AE 目标帧率范围），
+            // 否则 CameraX 默认按传感器可用帧率给，可能远低于用户设置值
+            applyTargetFps(imageAnalysisBuilder, targetFps)
+            val imageAnalysis = imageAnalysisBuilder.build()
 
             imageAnalysis.setAnalyzer(cameraExecutor, ImageAnalysis.Analyzer { imageProxy ->
                 try {
@@ -333,38 +361,26 @@ class CameraService : LifecycleService() {
                         imageProxy.close()
                         return@Analyzer  // 不在时间窗内，直接丢弃帧
                     }
-                    // 应用帧率限制（每秒平均策略）
+// 只读诊断：统计分析线程实际收到的帧（时间窗内）
+                    diagRawCount++
+
+                    // 应用帧率限制（均匀间隔到达：到固定时间间隔才处理，其余帧毫秒级丢弃）
                     val now = System.currentTimeMillis()
-                    if (secondStartTs == 0L || now - secondStartTs >= 1000L) {
-                        secondStartTs = now
-                        secondFrameCount = 0
-                    }
-                    if (secondFrameCount >= targetFps) {
-                        imageProxy.close()   // 这一秒的帧数已达上限，丢弃
+                    if (nextEmitAt == 0L) nextEmitAt = now
+                    if (mjpegEnabled && now < nextEmitAt) {
+                        imageProxy.close()
                         return@Analyzer
                     }
-                    secondFrameCount++
-                    val frameStartTs = now  // 用于统计整帧处理耗时
-
-                    // 统计实际帧率（每秒刷新一次）
-                    frameCount++
-                    if (fpsWindowStart == 0L) {
-                        fpsWindowStart = now
-                    } else if (now - fpsWindowStart >= 1000L) {
-                        currentFps = frameCount
-                        frameCount = 0
-                        fpsWindowStart = now
-                        // 发送帧率给 UI
-                        val fpsIntent = Intent("com.hpu.selfcammonitor.FPS_UPDATE")
-                        fpsIntent.putExtra("fps", currentFps)
-                        LocalBroadcastManager.getInstance(this@CameraService).sendBroadcast(fpsIntent)
+                    if (mjpegEnabled) {
+                        // 防止掉帧后疯狂追赶造成突发，同时保持固定节奏
+                        nextEmitAt = maxOf(nextEmitAt + (1000L / targetFps), now)
                     }
+                    val frameStartTs = now  // 用于统计整帧处理耗时
 
                     // 根据录像模式处理
                     when (recordMode) {
                         MODE_CONTINUOUS -> {
                             // 连续录像：确保录像正在运行（服务启动时开始，模式切换时处理）
-                            // 注意：连续录像的启动/停止在 onStartCommand 和模式切换时控制
                             // 这里不需要额外动作，只需保持推流（如果需要）
                         }
                         MODE_MOTION_TRIGGERED -> {
@@ -377,20 +393,39 @@ class CameraService : LifecycleService() {
                             }
                         }
                         MODE_PREVIEW_ONLY -> {
-                            // 不录像、不运动检测，直接跳过运动检测和录制逻辑
-                            // 注意：仍可保留 MJPEG 推流（如果用户需要预览）
+                            // 不录像、不运动检测
                         }
                     }
-                    // MJPEG 推流
+                    // MJPEG 推流：只在分析线程做廉价的 NV21 拷贝，旋转 + JPEG 编码交给独立线程池，
+                    // 让分析线程快速返回，CameraX 不用等编码完成，从而让实际出帧更贴近目标帧率。
                     if (mjpegEnabled) {
-                        val jpegData = mjpegStreamer.imageToJpeg(imageProxy, 60)
-                        if (jpegData != null) {
-                            mjpegStreamer.pushFrame(jpegData)
+                        val copyStart = System.nanoTime()
+                        val nv21 = MJPEGStreamer.yuv420888ToNv21(imageProxy)
+                        val copyCostMs = (System.nanoTime() - copyStart) / 1_000_000L
+                        // 只读诊断：汇总该秒的拷贝耗时，分析线程单帧 CPU 成本
+                        synchronized(diagCopyLock) {
+                            diagThreadName = Thread.currentThread().name
+                            diagCopyCount++
+                            diagCopySumMs += copyCostMs
+                            if (copyCostMs < diagCopyMinMs) diagCopyMinMs = copyCostMs
+                            if (copyCostMs > diagCopyMaxMs) diagCopyMaxMs = copyCostMs
+                        }
+                        if (nv21 != null) {
+                            val frameWidth = imageProxy.width
+                            val frameHeight = imageProxy.height
+                            val rotation = imageProxy.imageInfo.rotationDegrees
+                            encodeExecutor.execute {
+                                val jpeg = mjpegStreamer.nv21ToJpeg(nv21, frameWidth, frameHeight, rotation, 60)
+                                if (jpeg != null) {
+                                    mjpegStreamer.pushFrame(jpeg)
+                                    updateFps()
+                                }
+                            }
                         }
                     }
 
                     val frameCost = System.currentTimeMillis() - frameStartTs
-                    Log.d(TAG, "帧处理完成: 耗时=${frameCost}ms, 实际帧率约=${1000 / frameCost.coerceAtLeast(1)}fps")
+//                    Log.d(TAG, "帧处理完成: 耗时=${frameCost}ms, 实际帧率约=${1000 / frameCost.coerceAtLeast(1)}fps")
 
                 } catch (e: Exception) {
                     Log.e(TAG, "帧分析错误", e)
@@ -422,7 +457,10 @@ class CameraService : LifecycleService() {
                     this,
                     cameraSelector,
                     *useCases.toTypedArray()
-                )
+                ).also { camera ->
+                    // 只读诊断：打印传感器在该分辨率下的可达帧率上限
+                    logCameraFpsCap(camera, targetWidth, targetHeight)
+                }
                 Log.d(TAG, "相机绑定成功")
 
                 // 绑定成功后根据模式启动连续录像
@@ -448,6 +486,47 @@ class CameraService : LifecycleService() {
 //
 //        return "${videoName}_${dateTimePart}_${lastThreeDigits}.mp4"
 //    }
+
+    // 只读诊断：打印相机/传感器在当前分辨率下的可达帧率上限
+    // （帧率上限 = 1e9ns / getOutputMinFrameDuration，即最短帧间隔对应的最大 fps）
+    private fun logCameraFpsCap(camera: Camera?, width: Int, height: Int) {
+        if (camera == null) return
+        try {
+            val cameraId = Camera2CameraInfo.from(camera.cameraInfo).cameraId
+            val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+            val map: StreamConfigurationMap? =
+                characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            if (map == null) {
+                Log.d(TAG, "FPS诊断: 无法读取 SCALER_STREAM_CONFIGURATION_MAP")
+                return
+            }
+            val minDurNs = map.getOutputMinFrameDuration(ImageFormat.YUV_420_888, Size(width, height))
+            if (minDurNs != 0L) {
+                val maxFps = 1_000_000_000L / minDurNs
+                Log.d(TAG, "FPS诊断: 传感器可达上限 ${maxFps}fps @ ${width}x${height} (minFrameDuration=${minDurNs}ns)")
+            } else {
+                Log.d(TAG, "    FPS诊断: ${width}x${height} 不支持 YUV_420_888 输出，无法确定帧率上限")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "FPS诊断: 读取传感器帧率上限失败", e)
+        }
+    }
+
+    // 通过 Camera2 interop 请求相机按目标帧率出帧（AE 目标帧率范围）。
+    // 仅供参考，不保证精确达到；分辨率/帧率仍需重启监控才生效。
+    private fun applyTargetFps(builder: ImageAnalysis.Builder, fps: Int) {
+        if (fps <= 0) return
+        try {
+            Camera2Interop.Extender(builder)
+                .setCaptureRequestOption(
+                    CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                    Range(fps, fps)
+                )
+        } catch (e: Exception) {
+            Log.e(TAG, "设置相机目标帧率失败", e)
+        }
+    }
 
     private fun isWithinTimeWindow(): Boolean {
         val start = monitorStart ?: return true  // 为空时无限制，全天
@@ -647,6 +726,50 @@ class CameraService : LifecycleService() {
             Log.e(TAG, "Failed to get IP", e)
         }
         return "0.0.0.0"
+    }
+
+    // 更新实际帧率（在编码线程中调用，体现真实推出去的帧）
+    @Synchronized
+    private fun updateFps() {
+        val now = System.currentTimeMillis()
+        frameCount++
+        diagPushedCount++
+        if (fpsWindowStart == 0L) {
+            fpsWindowStart = now
+        } else if (now - fpsWindowStart >= 1000L) {
+            currentFps = frameCount
+            frameCount = 0
+            fpsWindowStart = now
+            val fpsIntent = Intent("com.hpu.selfcammonitor.FPS_UPDATE")
+            fpsIntent.putExtra("fps", currentFps)
+            LocalBroadcastManager.getInstance(this).sendBroadcast(fpsIntent)
+
+            // 只读诊断:每秒打印「分析收到 RAW 帧数 / 实际推送 PUSHED 帧数」
+            if (diagWindowStart == 0L) diagWindowStart = now
+            if (now - diagWindowStart >= 1000L) {
+                val copyAvg: Long
+                val copyMin: Long
+                val copyMax: Long
+                val copyN: Long
+                val thread: String
+                synchronized(diagCopyLock) {
+                    copyAvg = if (diagCopyCount > 0) diagCopySumMs / diagCopyCount else 0
+                    copyMin = if (diagCopyCount > 0) diagCopyMinMs else 0
+                    copyMax = diagCopyMaxMs
+                    copyN = diagCopyCount
+                    thread = diagThreadName
+                    diagCopyCount = 0
+                    diagCopySumMs = 0
+                    diagCopyMinMs = Long.MAX_VALUE
+                    diagCopyMaxMs = 0
+                }
+                Log.d(TAG, "FPS诊断: RAW=${diagRawCount}fps, PUSHED=${diagPushedCount}fps, 显示fps=$currentFps, targetFps=$targetFps, " +
+                        "拷贝耗时(${thread}): n=$copyN, min=${copyMin}ms, avg=${copyAvg}ms, max=${copyMax}ms")
+                diagRawCount = 0
+                diagPushedCount = 0
+                diagWindowStart = now
+            }
+        }
     }
 
     private fun sendStatusBroadcast() {

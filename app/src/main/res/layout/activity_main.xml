@@ -32,7 +32,7 @@
                 android:id="@+id/btnSettings"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:src="@android:drawable/ic_menu_manage"
+                android:src="@drawable/ic_menu_settings"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="设置" />
         </LinearLayout>
