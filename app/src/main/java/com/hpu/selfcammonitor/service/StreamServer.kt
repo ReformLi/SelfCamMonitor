@@ -1,6 +1,7 @@
 package com.hpu.selfcammonitor.service
 
 import fi.iki.elonen.NanoHTTPD
+import java.io.ByteArrayInputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
 import android.util.Base64
@@ -43,6 +44,38 @@ class StreamServer(port: Int = 8080) : NanoHTTPD(port) {
             }
         }
 
+        if (session?.uri == "/" || session?.uri == "/index.html") {
+            val res = newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", VIEWER_HTML)
+            res.addHeader("Cache-Control", "no-store")
+            return res
+        }
+
+        if (session?.uri == "/status") {
+            val json = """{"mjpegEnabled":$isMjpegEnabled,"clientCount":${mjpegStreamer.getClientCount()},"lastFrameAge":${mjpegStreamer.getLastFrameAge()}}"""
+            val res = newFixedLengthResponse(Response.Status.OK, "application/json", json)
+            res.addHeader("Cache-Control", "no-store")
+            return res
+        }
+
+        if (session?.uri == "/snapshot") {
+            if (!isMjpegEnabled) {
+                return newFixedLengthResponse(
+                    Response.Status.SERVICE_UNAVAILABLE, "text/plain", "推流已关闭"
+                )
+            }
+            val jpeg = mjpegStreamer.getLatestJpeg()
+            if (jpeg == null) {
+                return newFixedLengthResponse(
+                    Response.Status.SERVICE_UNAVAILABLE, "text/plain", "暂无画面"
+                )
+            }
+            val res = newFixedLengthResponse(
+                Response.Status.OK, "image/jpeg", ByteArrayInputStream(jpeg), jpeg.size.toLong()
+            )
+            res.addHeader("Cache-Control", "no-store")
+            return res
+        }
+
         if (session?.uri == "/video") {
             // 检查推流开关
             if (!isMjpegEnabled) {
@@ -65,5 +98,161 @@ class StreamServer(port: Int = 8080) : NanoHTTPD(port) {
             )
         }
         return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "404 Not Found")
+    }
+
+    companion object {
+        private val VIEWER_HTML = """
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>SelfCamMonitor</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:#1a1a1a;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column}
+#topbar{display:flex;align-items:center;padding:8px 12px;background:#2a2a2a;gap:8px;flex-shrink:0}
+#dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+#dot.connecting{background:#ffc107;animation:pulse 1s infinite}
+#dot.live{background:#28a745}
+#dot.disconnected{background:#dc3545;animation:pulse 1s infinite}
+#dot.off{background:#6c757d}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+#st{font-size:14px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#fps{font-size:12px;color:#888;flex-shrink:0;min-width:40px;text-align:right}
+.btn{background:#3a3a3a;color:#e0e0e0;border:1px solid #555;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;flex-shrink:0;touch-action:manipulation;white-space:nowrap}
+.btn:active{background:#4a4a4a}
+#container{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;min-height:0;touch-action:none}
+#wrapper{position:relative;transform-origin:center center;transition:none;display:flex;align-items:center;justify-content:center;will-change:transform}
+#img{display:block;max-width:100%;max-height:100%;object-fit:contain;-webkit-user-drag:none;user-select:none}
+#overlay{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:#666;font-size:16px;display:none}
+#overlay.show{display:block}
+#bottombar{padding:6px 12px;background:#2a2a2a;font-size:12px;color:#888;flex-shrink:0;display:flex;justify-content:space-between}
+#fs-ctrl{display:none;position:fixed;top:10px;right:10px;gap:8px;z-index:100}
+:fullscreen #topbar,:fullscreen #bottombar{display:none}
+:fullscreen #container{height:100vh}
+:fullscreen #fs-ctrl{display:flex}
+:-webkit-full-screen #topbar,:-webkit-full-screen #bottombar{display:none}
+:-webkit-full-screen #container{height:100vh}
+:-webkit-full-screen #fs-ctrl{display:flex}
+</style>
+</head>
+<body>
+<div id="topbar">
+<div id="dot" class="connecting"></div>
+<span id="st">连接中...</span>
+<span id="fps"></span>
+<button id="btn-r" class="btn">旋转</button>
+<button id="btn-f" class="btn">全屏</button>
+</div>
+<div id="container">
+<div id="wrapper"><img id="img" alt="监控画面"></div>
+<div id="overlay"></div>
+</div>
+<div id="bottombar">
+<span id="ic"></span>
+<span id="it"></span>
+</div>
+<div id="fs-ctrl">
+<button class="btn" onclick="doRotate()">旋转</button>
+<button class="btn" onclick="toggleFs()">退出全屏</button>
+</div>
+<script>
+var img=document.getElementById('img'),wrapper=document.getElementById('wrapper'),
+dot=document.getElementById('dot'),st=document.getElementById('st'),
+fps=document.getElementById('fps'),ov=document.getElementById('overlay'),
+ic=document.getElementById('ic'),it=document.getElementById('it'),
+container=document.getElementById('container');
+var SI=200,HI=3000,ST=5000;
+var rot=0,zoom=1,panX=0,panY=0,fc=0,lf=0,stat='connecting',stTimer=null,bu=null;
+function setStatus(s){
+  stat=s;dot.className=s;
+  var t={connecting:'连接中...',live:'已连接',disconnected:'已断开，正在重连...',off:'推流已关闭'};
+  st.textContent=t[s]||s;
+  if(s==='disconnected'||s==='off'){ov.textContent=t[s];ov.classList.add('show');}
+  else ov.classList.remove('show');
+}
+function fetchSnap(){
+  fetch('/snapshot',{cache:'no-store'}).then(function(r){
+    if(!r.ok)throw 0;return r.blob();
+  }).then(function(b){
+    if(b.size<100)throw 0;
+    if(bu)URL.revokeObjectURL(bu);
+    bu=URL.createObjectURL(b);img.src=bu;
+    lf=Date.now();fc++;if(stat!=='live')setStatus('live');
+  }).catch(function(){});
+}
+function startSnap(){if(stTimer)return;fetchSnap();stTimer=setInterval(fetchSnap,SI);}
+function stopSnap(){if(stTimer){clearInterval(stTimer);stTimer=null;}}
+function heartbeat(){
+  fetch('/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
+    if(!d.mjpegEnabled){setStatus('off');stopSnap();return;}
+    ic.textContent='客户端：'+d.clientCount;
+    it.textContent=new Date().toLocaleTimeString();
+    if(d.lastFrameAge>ST){setStatus('connecting');return;}
+    if(stat==='disconnected'){setStatus('connecting');startSnap();}
+  }).catch(function(){setStatus('disconnected');stopSnap();});
+}
+setInterval(function(){
+  var z=zoom>1.01?(Math.round(zoom*10)/10)+'x':'';
+  if(stat==='live'&&fc>0)fps.textContent=z?z+' · '+fc+' fps':fc+' fps';else fps.textContent=z;
+  fc=0;
+},1000);
+setInterval(function(){
+  if(stat==='live'&&Date.now()-lf>ST){setStatus('connecting');stopSnap();startSnap();}
+},2000);
+function applyTransform(){
+  wrapper.style.transform='translate('+panX+'px,'+panY+'px) rotate('+rot+'deg) scale('+zoom+')';
+  if(rot===90||rot===270){
+    img.style.maxWidth=container.clientHeight+'px';
+    img.style.maxHeight=container.clientWidth+'px';
+  }else{img.style.maxWidth='100%';img.style.maxHeight='100%';}
+}
+function doRotate(){
+  wrapper.style.transition='transform .3s ease';
+  rot=(rot+90)%360;zoom=1;panX=0;panY=0;applyTransform();
+  setTimeout(function(){wrapper.style.transition='none';},350);
+}
+var MIN_Z=1,MAX_Z=5;
+function clampZ(v){return Math.max(MIN_Z,Math.min(MAX_Z,v));}
+function getDist(t){var dx=t[0].clientX-t[1].clientX,dy=t[0].clientY-t[1].clientY;return Math.sqrt(dx*dx+dy*dy);}
+var touching=false,tx=0,ty=0,pinching=false,pd=0,pz=1,lastTap=0;
+container.addEventListener('touchstart',function(e){
+  if(e.touches.length===2){pinching=true;touching=false;pd=getDist(e.touches);pz=zoom;e.preventDefault();}
+  else if(e.touches.length===1&&zoom>1){touching=true;tx=e.touches[0].clientX;ty=e.touches[0].clientY;}
+},{passive:false});
+container.addEventListener('touchmove',function(e){
+  if(pinching&&e.touches.length===2){e.preventDefault();zoom=clampZ(pz*getDist(e.touches)/pd);if(zoom<=1.01){zoom=1;panX=0;panY=0;}applyTransform();}
+  else if(touching&&e.touches.length===1){e.preventDefault();panX+=e.touches[0].clientX-tx;panY+=e.touches[0].clientY-ty;tx=e.touches[0].clientX;ty=e.touches[0].clientY;applyTransform();}
+},{passive:false});
+container.addEventListener('touchend',function(e){
+  if(e.touches.length<2)pinching=false;
+  if(e.touches.length===1&&zoom>1){touching=true;tx=e.touches[0].clientX;ty=e.touches[0].clientY;}
+  else if(e.touches.length===0){touching=false;var now=Date.now();if(now-lastTap<300){if(zoom>1.01){zoom=1;panX=0;panY=0;}else{zoom=2;}applyTransform();}lastTap=now;}
+});
+container.addEventListener('touchcancel',function(){pinching=false;touching=false;});
+container.addEventListener('wheel',function(e){e.preventDefault();zoom=clampZ(zoom*(e.deltaY<0?1.1:0.9));if(zoom<=1.01){zoom=1;panX=0;panY=0;}applyTransform();},{passive:false});
+var mousing=false,mx=0,my=0;
+container.addEventListener('mousedown',function(e){if(zoom>1){mousing=true;mx=e.clientX;my=e.clientY;e.preventDefault();}});
+window.addEventListener('mousemove',function(e){if(mousing){panX+=e.clientX-mx;panY+=e.clientY-my;mx=e.clientX;my=e.clientY;applyTransform();}});
+window.addEventListener('mouseup',function(){mousing=false;});
+container.addEventListener('dblclick',function(){if(zoom>1.01){zoom=1;panX=0;panY=0;}else{zoom=2;}applyTransform();});
+function toggleFs(){
+  var e=document.documentElement,fs=document.fullscreenElement||document.webkitFullscreenElement;
+  if(!fs){if(e.requestFullscreen)e.requestFullscreen();else if(e.webkitRequestFullscreen)e.webkitRequestFullscreen();}
+  else{if(document.exitFullscreen)document.exitFullscreen();else if(document.webkitExitFullscreen)document.webkitExitFullscreen();}
+}
+document.getElementById('btn-r').addEventListener('click',doRotate);
+document.getElementById('btn-f').addEventListener('click',toggleFs);
+window.addEventListener('resize',applyTransform);
+document.addEventListener('fullscreenchange',applyTransform);
+document.addEventListener('webkitfullscreenchange',applyTransform);
+setStatus('connecting');startSnap();
+setInterval(heartbeat,HI);heartbeat();
+</script>
+</body>
+</html>
+        """.trimIndent()
     }
 }

@@ -167,6 +167,13 @@ class MJPEGStreamer {
     private val clients = ConcurrentHashMap<OutputStream, ClientInfo>()
     private val pushExecutor: ExecutorService = Executors.newCachedThreadPool()
 
+    // 最新一帧 JPEG（供 /snapshot 端点使用）
+    private val latestJpeg = AtomicReference<ByteArray?>(null)
+
+    // 最近一次推帧时间戳（供 /status 端点判断画面是否活跃）
+    @Volatile
+    private var lastFrameTime: Long = 0
+
     fun addClient(outputStream: OutputStream) {
         val info = ClientInfo(outputStream)
         clients[outputStream] = info
@@ -179,6 +186,18 @@ class MJPEGStreamer {
         clients.remove(outputStream)
         Log.d(TAG, "Client disconnected, total: ${clients.size}")
         try { outputStream.close() } catch (_: Exception) {}
+    }
+
+    /** 获取最新一帧 JPEG 数据（供 /snapshot 端点） */
+    fun getLatestJpeg(): ByteArray? = latestJpeg.get()
+
+    /** 当前 MJPEG 客户端数量 */
+    fun getClientCount(): Int = clients.size
+
+    /** 最近一帧距今的毫秒数；从未推过帧时返回大值 */
+    fun getLastFrameAge(): Long {
+        val t = lastFrameTime
+        return if (t == 0L) 999999999L else System.currentTimeMillis() - t
     }
 
     /**
@@ -214,11 +233,16 @@ class MJPEGStreamer {
      * 只更新每个客户端的 pendingFrame，不阻塞。
      */
     fun pushFrame(jpegData: ByteArray) {
-        if (clients.isEmpty()) return
         if (jpegData.size < 1000) {
             Log.d(TAG, "Skipping small frame (size=${jpegData.size})")
             return
         }
+
+        // 存储最新帧，供 /snapshot 端点使用（即使没有 MJPEG 客户端也存）
+        latestJpeg.set(jpegData)
+        lastFrameTime = System.currentTimeMillis()
+
+        if (clients.isEmpty()) return
 
         val frameHeader = "\r\n--$BOUNDARY\r\n" +
                 "Content-Type: image/jpeg\r\n" +
