@@ -93,8 +93,10 @@ class CameraService : LifecycleService() {
     private var recording: Recording? = null
     private var isRecording = false
 
-    private var lastFrameTime = 0L
-    private var minFrameInterval = 0L // 由 fps 计算
+    // 帧率限制（每秒平均策略）
+    private var targetFps = 10
+    private var secondFrameCount = 0
+    private var secondStartTs = 0L
 
     // 实际帧率统计
     private var frameCount = 0
@@ -184,9 +186,8 @@ class CameraService : LifecycleService() {
         // 连续录像分段时长（秒转毫秒）
         continuousSegmentDurationMs = prefs.getInt("continuous_segment_sec", DEFAULT_CONTINUOUS_SEGMENT_SEC) * 1000L
 
-        // 帧率控制
-        val fps = prefs.getInt("fps", 10).coerceIn(1, 30)
-        minFrameInterval = 1000L / fps
+        // 帧率控制（每秒平均策略）
+        targetFps = prefs.getInt("fps", 10).coerceIn(1, 30)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -332,13 +333,17 @@ class CameraService : LifecycleService() {
                         imageProxy.close()
                         return@Analyzer  // 不在时间窗内，直接丢弃帧
                     }
-                    // 应用帧率限制
+                    // 应用帧率限制（每秒平均策略）
                     val now = System.currentTimeMillis()
-                    if (now - lastFrameTime < minFrameInterval) {
-                        imageProxy.close()   // 丢弃帧
+                    if (secondStartTs == 0L || now - secondStartTs >= 1000L) {
+                        secondStartTs = now
+                        secondFrameCount = 0
+                    }
+                    if (secondFrameCount >= targetFps) {
+                        imageProxy.close()   // 这一秒的帧数已达上限，丢弃
                         return@Analyzer
                     }
-                    lastFrameTime = now
+                    secondFrameCount++
                     val frameStartTs = now  // 用于统计整帧处理耗时
 
                     // 统计实际帧率（每秒刷新一次）
