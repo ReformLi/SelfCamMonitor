@@ -7,6 +7,7 @@ import android.widget.CheckBox
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.hpu.selfcammonitor.R
+import com.hpu.selfcammonitor.utils.FileSizeFormatter
 import java.io.File
 
 class FolderAdapter(
@@ -36,9 +37,8 @@ class FolderAdapter(
         val folder = folders[position]
         val fileCount = folder.listFiles()?.size ?: 0
         val totalSize = folder.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-        val sizeMB = totalSize / (1024 * 1024)
         holder.tvName.text = folder.name
-        holder.tvInfo.text = "$fileCount 个视频，${sizeMB} MB"
+        holder.tvInfo.text = "$fileCount 个视频，${FileSizeFormatter.format(totalSize)}"
 
         // 多选模式显示 CheckBox，否则隐藏
         holder.checkBox.visibility = if (isSelectMode) View.VISIBLE else View.GONE

@@ -7,6 +7,7 @@ import android.widget.CheckBox
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.hpu.selfcammonitor.R
+import com.hpu.selfcammonitor.utils.FileSizeFormatter
 import java.io.File
 
 class VideoAdapter(
@@ -94,7 +95,7 @@ class VideoAdapter(
 
         fun bind(video: File, dateTime: String, duration: String, isSelectMode: Boolean, isSelected: Boolean) {
             tvFileName.text = video.name
-            tvFileSize.text = "${video.length() / 1024} KB"
+            tvFileSize.text = FileSizeFormatter.format(video.length())
             tvDateTime.text = dateTime
             tvDuration.text = duration
             checkBox.visibility = if (isSelectMode) View.VISIBLE else View.GONE

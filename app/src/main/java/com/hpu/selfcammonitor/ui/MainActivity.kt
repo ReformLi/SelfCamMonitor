@@ -22,6 +22,7 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.hpu.selfcammonitor.service.CameraService
+import com.hpu.selfcammonitor.utils.FileSizeFormatter
 import com.hpu.selfcammonitor.R
 import com.hpu.selfcammonitor.ui.recordings.RecordingsActivity
 import com.hpu.selfcammonitor.ui.settings.SettingsActivity
@@ -345,8 +346,7 @@ class MainActivity : AppCompatActivity() {
                 .filter { it.isFile && it.extension.equals("mp4", ignoreCase = true) }
                 .sumOf { it.length() }
         } else 0L
-        val sizeMB = totalSize / (1024 * 1024)
-        tvStorage.text = "录像存储: $sizeMB MB"
+        tvStorage.text = "录像存储: ${FileSizeFormatter.format(totalSize)}"
     }
 
 }
