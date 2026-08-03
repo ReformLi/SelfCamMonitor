@@ -3,11 +3,14 @@ package com.hpu.selfcammonitor.ui.settings
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.ImageFormat
+import android.graphics.Rect
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Button
@@ -101,6 +104,26 @@ class SettingsActivity : AppCompatActivity() {
                 .setPositiveButton("知道了", null)
                 .show()
         }
+    }
+
+    /**
+     * 点击输入框以外的区域时：清除焦点并隐藏软键盘。
+     * 下拉框的选项弹层属于独立窗口，点选选项不会经过此处，不受影响。
+     */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.action == MotionEvent.ACTION_UP) {
+            val focused = currentFocus
+            if (focused is EditText) {
+                val rect = Rect()
+                focused.getGlobalVisibleRect(rect)
+                if (!rect.contains(ev.rawX.toInt(), ev.rawY.toInt())) {
+                    focused.clearFocus()
+                    val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+                    imm.hideSoftInputFromWindow(focused.windowToken, 0)
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     private fun loadSettings() {
