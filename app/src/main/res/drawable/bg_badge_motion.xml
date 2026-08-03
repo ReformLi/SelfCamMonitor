@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 运动触发录像类型标签背景（红色 12% 透明度胶囊） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#1FF44336" />
+    <corners android:radius="8dp" />
+</shape>

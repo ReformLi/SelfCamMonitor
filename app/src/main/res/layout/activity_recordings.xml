@@ -21,13 +21,13 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingHorizontal="12dp"
-            android:paddingVertical="16dp">
+            android:paddingVertical="8dp">
 
             <!-- 返回按钮 -->
             <ImageButton
                 android:id="@+id/btnBack"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:src="@drawable/ic_menu_revert"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="返回"
@@ -38,7 +38,10 @@
             <Button
                 android:id="@+id/btnSelectAll"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="40dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
                 android:text="全选"
                 android:textSize="14sp"
                 android:visibility="gone"
@@ -51,7 +54,10 @@
             <Button
                 android:id="@+id/btnCancelSelect"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="40dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
                 android:text="取消"
                 android:textSize="14sp"
                 style="@style/Widget.Material3.Button.TextButton"
@@ -66,7 +72,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="共 0 个文件夹"
-                android:textSize="18sp"
+                android:textSize="16sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary"
                 android:visibility="visible"
@@ -81,7 +87,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="已选 0 项"
-                android:textSize="16sp"
+                android:textSize="15sp"
                 android:textColor="@color/text_primary"
                 android:visibility="gone"
                 app:layout_constraintStart_toStartOf="parent"
@@ -91,58 +97,89 @@
         </androidx.constraintlayout.widget.ConstraintLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- 录像列表 -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerView"
+    <!-- 录像列表 + 空状态 -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:padding="4dp" />
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="4dp" />
+
+        <LinearLayout
+            android:id="@+id/emptyView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:src="@drawable/ic_movie"
+                app:tint="@color/text_hint"
+                android:contentDescription="暂无录像" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="暂无录像"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginTop="12dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="启动监控后，录像将按日期自动归档到这里"
+                android:textSize="12sp"
+                android:textColor="@color/text_hint"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+    </FrameLayout>
 
     <!-- 底部按钮容器（多选模式显示） -->
     <LinearLayout
         android:id="@+id/buttonCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="8dp"
+        android:layout_margin="12dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:visibility="gone">
 
-        <androidx.cardview.widget.CardView
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDelete"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginEnd="4dp"
-            app:cardCornerRadius="8dp"
-            app:cardElevation="2dp">
+            android:text="删除选中"
+            android:textSize="15sp"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:textColor="@color/status_stopped"
+            app:strokeColor="@color/status_stopped"
+            app:icon="@drawable/ic_delete"
+            app:iconTint="@color/status_stopped"
+            app:iconGravity="textStart"
+            app:cornerRadius="12dp"
+            android:layout_marginEnd="6dp" />
 
-            <Button
-                android:id="@+id/btnDelete"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="删除选中"
-                android:textSize="16sp"
-                android:backgroundTint="@color/status_stopped"
-                android:paddingVertical="12dp" />
-        </androidx.cardview.widget.CardView>
-
-        <androidx.cardview.widget.CardView
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnExport"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="4dp"
-            app:cardCornerRadius="8dp"
-            app:cardElevation="2dp">
-
-            <Button
-                android:id="@+id/btnExport"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="导出选中"
-                android:textSize="16sp"
-                android:backgroundTint="@color/primary"
-                android:paddingVertical="12dp" />
-        </androidx.cardview.widget.CardView>
+            android:text="导出选中"
+            android:textSize="15sp"
+            android:backgroundTint="@color/primary"
+            app:icon="@drawable/ic_export"
+            app:iconGravity="textStart"
+            app:cornerRadius="12dp"
+            android:layout_marginStart="6dp" />
     </LinearLayout>
 </LinearLayout>

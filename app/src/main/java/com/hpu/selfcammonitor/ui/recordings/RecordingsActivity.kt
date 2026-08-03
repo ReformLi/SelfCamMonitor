@@ -39,6 +39,7 @@ class RecordingsActivity : AppCompatActivity() {
     private var folderList: List<File> = emptyList()
     private var isSelectMode = false
     private val selectedFolders = mutableSetOf<File>()
+    private lateinit var emptyView: LinearLayout
 
     private val pickDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let { exportSelectedFolders(it) }
@@ -57,6 +58,7 @@ class RecordingsActivity : AppCompatActivity() {
         btnDelete = findViewById(R.id.btnDelete)
         btnExport = findViewById(R.id.btnExport)
         buttonCard = findViewById(R.id.buttonCard)
+        emptyView = findViewById(R.id.emptyView)
         // 绑定返回按钮
         btnBack = findViewById(R.id.btnBack)
         btnBack.setOnClickListener {
@@ -131,6 +133,18 @@ class RecordingsActivity : AppCompatActivity() {
         }
         recyclerView.adapter = adapter
         updateFileCountDisplay()
+        updateEmptyState()
+    }
+
+    // 空状态切换：没有任何录像文件夹时显示占位提示
+    private fun updateEmptyState() {
+        if (folderList.isEmpty()) {
+            emptyView.visibility = View.VISIBLE
+            recyclerView.visibility = View.GONE
+        } else {
+            emptyView.visibility = View.GONE
+            recyclerView.visibility = View.VISIBLE
+        }
     }
 
     private fun enterSelectMode(firstFolder: File) {

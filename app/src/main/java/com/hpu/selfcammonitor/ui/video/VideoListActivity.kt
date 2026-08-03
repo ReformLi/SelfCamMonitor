@@ -51,7 +51,10 @@ class VideoListActivity : AppCompatActivity() {
     private lateinit var searchBar: CardView
     private lateinit var etSearch: EditText
     private lateinit var btnClearSearch: ImageButton
-    private lateinit var btnSearchConfirm: Button
+
+    // 空状态提示
+    private lateinit var emptyView: LinearLayout
+    private lateinit var tvEmptyText: TextView
 
     private var allVideos: List<File> = emptyList()
     private var currentVideos: List<File> = emptyList()
@@ -115,7 +118,9 @@ class VideoListActivity : AppCompatActivity() {
         searchBar = findViewById(R.id.searchBar)
         etSearch = findViewById(R.id.etSearch)
         btnClearSearch = findViewById(R.id.btnClearSearch)
-        btnSearchConfirm = findViewById(R.id.btnSearchConfirm)
+
+        emptyView = findViewById(R.id.emptyView)
+        tvEmptyText = findViewById(R.id.tvEmptyText)
 
         val folderFile = File(folderPath)
         tvTitle.text = folderFile.name
@@ -140,6 +145,7 @@ class VideoListActivity : AppCompatActivity() {
         if (dateTimeMap.isEmpty() || durationMap.isEmpty()) {
             loadMetadataAsync()
         }
+        updateEmptyState()
     }
 
     private fun loadMetadataAsync() {
@@ -254,10 +260,6 @@ class VideoListActivity : AppCompatActivity() {
             }
         }
 
-        btnSearchConfirm.setOnClickListener {
-            performSearch()
-        }
-
         etSearch.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 performSearch()
@@ -272,7 +274,20 @@ class VideoListActivity : AppCompatActivity() {
         else allVideos.filter { it.name.lowercase().contains(keyword) }
         adapter.updateData(currentVideos)
         updateFileCountDisplay()
+        updateEmptyState()
         currentFocus?.clearFocus()
+    }
+
+    // 空状态切换：无视频/搜索无结果时显示占位提示
+    private fun updateEmptyState() {
+        if (currentVideos.isEmpty()) {
+            emptyView.visibility = View.VISIBLE
+            recyclerView.visibility = View.GONE
+            tvEmptyText.text = if (allVideos.isEmpty()) "暂无视频" else "没有匹配的视频"
+        } else {
+            emptyView.visibility = View.GONE
+            recyclerView.visibility = View.VISIBLE
+        }
     }
 
     private fun setupListeners() {
@@ -395,6 +410,7 @@ class VideoListActivity : AppCompatActivity() {
                 exitSelectMode()
                 adapter.updateData(currentVideos)
                 updateFileCountDisplay()
+                updateEmptyState()
                 loadMetadataAsync()
             }
             .setNegativeButton("取消", null)

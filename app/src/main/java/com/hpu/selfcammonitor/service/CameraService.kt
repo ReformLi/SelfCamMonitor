@@ -591,16 +591,15 @@ class CameraService : LifecycleService() {
     }
 
     private fun isWithinTimeWindow(): Boolean {
-        val start = monitorStart ?: return true  // 为空时无限制，全天
-        val end = monitorEnd ?: return true  // 为空时无限制，全天
+        // 空白值（null 或空字符串）视为无限制，全天监控
+        val start = monitorStart?.takeIf { it.isNotBlank() } ?: return true
+        val end = monitorEnd?.takeIf { it.isNotBlank() } ?: return true
         if (start == end) return true  // 前后时间相等时 无限制，全天
+
+        val startMinutes = parseTimeToMinutes(start) ?: return true  // 格式非法时不限制，避免崩溃
+        val endMinutes = parseTimeToMinutes(end) ?: return true
         val now = Calendar.getInstance()
         val currentMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-
-        val startParts = start.split(":")
-        val startMinutes = startParts[0].toInt() * 60 + startParts[1].toInt()
-        val endParts = end.split(":")
-        val endMinutes = endParts[0].toInt() * 60 + endParts[1].toInt()
 
         return if (startMinutes <= endMinutes) {
             currentMinutes in startMinutes..endMinutes
@@ -608,6 +607,16 @@ class CameraService : LifecycleService() {
             // 跨天情况，如 22:00 - 06:00
             currentMinutes >= startMinutes || currentMinutes <= endMinutes
         }
+    }
+
+    // 将 "HH:mm" 解析为当日分钟数；格式非法（缺冒号、非数字、越界）返回 null
+    private fun parseTimeToMinutes(time: String): Int? {
+        val parts = time.split(":")
+        if (parts.size != 2) return null
+        val hour = parts[0].toIntOrNull() ?: return null
+        val minute = parts[1].toIntOrNull() ?: return null
+        if (hour !in 0..23 || minute !in 0..59) return null
+        return hour * 60 + minute
     }
 
     // 放在 CameraService 类内部
