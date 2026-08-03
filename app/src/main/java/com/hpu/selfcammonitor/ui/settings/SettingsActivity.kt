@@ -19,7 +19,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.hpu.selfcammonitor.R
 import com.hpu.selfcammonitor.service.CameraService
@@ -196,7 +195,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun sendReloadBroadcast() {
         val intent = Intent("com.hpu.selfcammonitor.RELOAD_CONFIG")
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        sendBroadcast(intent)
     }
 
     private fun saveSettings() {

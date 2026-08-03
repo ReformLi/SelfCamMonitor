@@ -1,14 +1,15 @@
 package com.hpu.selfcammonitor.ui.recordings // 请根据你的实际包名修改
 
-import android.app.ProgressDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -222,6 +223,34 @@ class RecordingsActivity : AppCompatActivity() {
     }
 
     /**
+     * 显示不可取消的导出进度对话框（替代已弃用的 ProgressDialog：
+     * 使用 AlertDialog + 不确定进度条 + 提示文本）
+     */
+    private fun showExportProgressDialog(message: String): AlertDialog {
+        val density = resources.displayMetrics.density
+        val progressBar = ProgressBar(this).apply { isIndeterminate = true }
+        val textView = TextView(this).apply {
+            text = message
+            textSize = 16f
+            setPadding((24 * density).toInt(), 0, 0, 0)
+        }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val hp = (24 * density).toInt()
+            val vp = (16 * density).toInt()
+            setPadding(hp, vp, hp, vp)
+            addView(progressBar)
+            addView(textView)
+        }
+        return AlertDialog.Builder(this)
+            .setView(container)
+            .setCancelable(false)
+            .create()
+            .apply { show() }
+    }
+
+    /**
      * 导出选中的文件夹（递归复制文件夹内所有 MP4 文件到用户选择的目标目录）
      */
     private fun exportSelectedFolders(treeUri: Uri) {
@@ -238,11 +267,7 @@ class RecordingsActivity : AppCompatActivity() {
             return
         }
 
-        val progress = ProgressDialog(this)
-        progress.setMessage("正在导出 ${allFiles.size} 个视频...")
-        progress.setProgressStyle(ProgressDialog.STYLE_SPINNER)
-        progress.setCancelable(false)
-        progress.show()
+        val progress = showExportProgressDialog("正在导出 ${allFiles.size} 个视频...")
 
         val rootDocument = DocumentFile.fromTreeUri(this, treeUri)
         if (rootDocument == null) {

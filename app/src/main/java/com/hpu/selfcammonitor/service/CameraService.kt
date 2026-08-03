@@ -37,6 +37,8 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCase
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.FileOutputOptions
 import androidx.camera.video.Quality
@@ -48,7 +50,6 @@ import androidx.camera.video.VideoRecordEvent
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.hpu.selfcammonitor.manager.AlertManager
 import com.hpu.selfcammonitor.utils.MJPEGStreamer
 import com.hpu.selfcammonitor.utils.MotionDetector
@@ -150,6 +151,11 @@ class CameraService : LifecycleService() {
         const val NOTIFICATION_ID = 1
         const val TAG = "CameraService"
 
+        // 服务运行状态标志（供界面查询，替代已弃用的 ActivityManager.getRunningServices）
+        @Volatile
+        var isRunning: Boolean = false
+            private set
+
         // CameraService.kt  companion object 内添加
         const val MODE_CONTINUOUS = 0      // 连续录像
         const val MODE_MOTION_TRIGGERED = 1 // 运动触发录像
@@ -219,8 +225,13 @@ class CameraService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
 
         // 在 onStartCommand 中或 onCreate 中
-        LocalBroadcastManager.getInstance(this).registerReceiver(configReceiver,
-            IntentFilter("com.hpu.selfcammonitor.RELOAD_CONFIG"))
+        // 注册配置热重载广播（RECEIVER_NOT_EXPORTED：仅接收本应用内广播，满足 Android 13+ 要求）
+        ContextCompat.registerReceiver(
+            this,
+            configReceiver,
+            IntentFilter("com.hpu.selfcammonitor.RELOAD_CONFIG"),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
 
         try {
             streamServer.start()
@@ -234,6 +245,7 @@ class CameraService : LifecycleService() {
         val ipAddress = getLocalIpAddress()
         val notification = buildNotification(ipAddress)
         startForeground(NOTIFICATION_ID, notification)
+        isRunning = true
 
         startCamera()
 
@@ -287,6 +299,7 @@ class CameraService : LifecycleService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isRunning = false
         stopContinuousRecording()
         stopMotionRecordingIfNeeded()
         streamServer.stop()
@@ -295,7 +308,11 @@ class CameraService : LifecycleService() {
         encodeExecutor.shutdown()
         stopClipRecording()
         if (wakeLock.isHeld) wakeLock.release()
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(configReceiver)
+        try {
+            unregisterReceiver(configReceiver)
+        } catch (e: IllegalArgumentException) {
+            // 接收器未注册（如 onStartCommand 未执行完），忽略
+        }
     }
 
     private fun createNotificationChannel() {
@@ -346,9 +363,17 @@ class CameraService : LifecycleService() {
             val targetHeight = parts.getOrNull(1)?.toIntOrNull() ?: 480
 
             // 1. 图像分析（MJPEG源 + 运动检测）
+            val resolutionSelector = ResolutionSelector.Builder()
+                .setResolutionStrategy(
+                    ResolutionStrategy(
+                        Size(targetWidth, targetHeight),
+                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                    )
+                )
+                .build()
             val imageAnalysisBuilder = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .setTargetResolution(Size(targetWidth, targetHeight))
+                .setResolutionSelector(resolutionSelector)
             // 请求相机按 targetFps 出帧（Camera2 interop 设置 AE 目标帧率范围），
             // 否则 CameraX 默认按传感器可用帧率给，可能远低于用户设置值
             applyTargetFps(imageAnalysisBuilder, targetFps)
@@ -742,7 +767,7 @@ class CameraService : LifecycleService() {
             fpsWindowStart = now
             val fpsIntent = Intent("com.hpu.selfcammonitor.FPS_UPDATE")
             fpsIntent.putExtra("fps", currentFps)
-            LocalBroadcastManager.getInstance(this).sendBroadcast(fpsIntent)
+            sendBroadcast(fpsIntent)
 
             // 只读诊断:每秒打印「分析收到 RAW 帧数 / 实际推送 PUSHED 帧数」
             if (diagWindowStart == 0L) diagWindowStart = now
@@ -779,7 +804,7 @@ class CameraService : LifecycleService() {
         intent.putExtra("running", true)
         intent.putExtra("mjpeg_enabled", mjpegEnabled)
         intent.putExtra("motion_detection_enabled", motionDetectionEnabled)
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        sendBroadcast(intent)
     }
 
     // 将 ImageProxy 转换为指定尺寸的 NV21

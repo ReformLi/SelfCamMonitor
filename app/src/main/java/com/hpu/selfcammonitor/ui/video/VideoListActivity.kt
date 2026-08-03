@@ -1,6 +1,5 @@
 package com.hpu.selfcammonitor.ui.video
 
-import android.app.ProgressDialog
 import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.net.Uri
@@ -8,6 +7,7 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
+import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -15,6 +15,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -176,7 +177,7 @@ class VideoListActivity : AppCompatActivity() {
             val dateTimePart = it.groupValues[1]
             return try {
                 val sdf = SimpleDateFormat("yyMMddHHmmss", Locale.getDefault())
-                val date = sdf.parse(dateTimePart)
+                val date = sdf.parse(dateTimePart) ?: return null
                 SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(date)
             } catch (e: Exception) {
                 null
@@ -418,13 +419,37 @@ class VideoListActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * 显示不可取消的导出进度对话框（替代已弃用的 ProgressDialog：
+     * 使用 AlertDialog + 不确定进度条 + 提示文本）
+     */
+    private fun showExportProgressDialog(message: String): AlertDialog {
+        val density = resources.displayMetrics.density
+        val progressBar = ProgressBar(this).apply { isIndeterminate = true }
+        val textView = TextView(this).apply {
+            text = message
+            textSize = 16f
+            setPadding((24 * density).toInt(), 0, 0, 0)
+        }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val hp = (24 * density).toInt()
+            val vp = (16 * density).toInt()
+            setPadding(hp, vp, hp, vp)
+            addView(progressBar)
+            addView(textView)
+        }
+        return AlertDialog.Builder(this)
+            .setView(container)
+            .setCancelable(false)
+            .create()
+            .apply { show() }
+    }
+
     private fun exportSelectedVideos(treeUri: Uri) {
         if (selectedVideos.isEmpty()) return
-        val progress = ProgressDialog(this)
-        progress.setMessage("正在导出 ${selectedVideos.size} 个视频...")
-        progress.setProgressStyle(ProgressDialog.STYLE_SPINNER)
-        progress.setCancelable(false)
-        progress.show()
+        val progress = showExportProgressDialog("正在导出 ${selectedVideos.size} 个视频...")
 
         val rootDocument = DocumentFile.fromTreeUri(this, treeUri)
         var successCount = 0

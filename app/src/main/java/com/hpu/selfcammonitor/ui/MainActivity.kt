@@ -1,7 +1,6 @@
 package com.hpu.selfcammonitor.ui
 
 import android.Manifest
-import android.app.ActivityManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -21,7 +20,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.hpu.selfcammonitor.service.CameraService
 import com.hpu.selfcammonitor.R
@@ -123,7 +121,7 @@ class MainActivity : AppCompatActivity() {
         switchMjpeg.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("mjpeg_enabled", isChecked).apply()
             val intent = Intent("com.hpu.selfcammonitor.RELOAD_CONFIG")
-            LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+            sendBroadcast(intent)
         }
 
         findViewById<ImageButton>(R.id.btnSettings).setOnClickListener {
@@ -176,16 +174,20 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, RecordingsActivity::class.java))
         }
 
-        // 注册服务状态广播
-        LocalBroadcastManager.getInstance(this).registerReceiver(
+        // 注册服务状态广播（RECEIVER_NOT_EXPORTED：仅接收本应用内广播）
+        ContextCompat.registerReceiver(
+            this,
             statusReceiver,
-            IntentFilter("com.hpu.selfcammonitor.SERVICE_STATUS")
+            IntentFilter("com.hpu.selfcammonitor.SERVICE_STATUS"),
+            ContextCompat.RECEIVER_NOT_EXPORTED
         )
 
         // 注册帧率更新广播
-        LocalBroadcastManager.getInstance(this).registerReceiver(
+        ContextCompat.registerReceiver(
+            this,
             fpsReceiver,
-            IntentFilter("com.hpu.selfcammonitor.FPS_UPDATE")
+            IntentFilter("com.hpu.selfcammonitor.FPS_UPDATE"),
+            ContextCompat.RECEIVER_NOT_EXPORTED
         )
 
         // 初始UI状态
@@ -212,13 +214,13 @@ class MainActivity : AppCompatActivity() {
     private fun saveAndNotifyMode(mode: Int) {
         prefs.edit().putInt("record_mode", mode).apply()
         val intent = Intent("com.hpu.selfcammonitor.RELOAD_CONFIG")
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        sendBroadcast(intent)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(statusReceiver)
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(fpsReceiver)
+        unregisterReceiver(statusReceiver)
+        unregisterReceiver(fpsReceiver)
     }
 
     // ---------- 权限相关 ----------
@@ -282,15 +284,7 @@ class MainActivity : AppCompatActivity() {
         updateUI(false)
     }
 
-    private fun isServiceRunning(): Boolean {
-        val manager = getSystemService(ACTIVITY_SERVICE) as ActivityManager
-        for (service in manager.getRunningServices(Integer.MAX_VALUE)) {
-            if (CameraService::class.java.name == service.service.className) {
-                return true
-            }
-        }
-        return false
-    }
+    private fun isServiceRunning(): Boolean = CameraService.isRunning
 
     // ---------- UI 更新 ----------
     private fun updateUI(running: Boolean) {
