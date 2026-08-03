@@ -28,6 +28,7 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCase
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.FileOutputOptions
 import androidx.camera.video.Quality
@@ -88,7 +89,7 @@ class CameraService : LifecycleService() {
     private var recordingSurface: Surface? = null
     private var previewUseCase: Preview? = null  // 用于提供录制 Surface
 
-    private lateinit var videoCapture: VideoCapture<Recorder>
+    private var videoCapture: VideoCapture<Recorder>? = null
     private var recording: Recording? = null
     private var isRecording = false
 
@@ -218,7 +219,17 @@ class CameraService : LifecycleService() {
     private val configReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val oldMode = recordMode
+            val wasPreviewOnly = (oldMode == MODE_PREVIEW_ONLY)
             loadSettings() // 重新加载所有配置
+            val isPreviewOnly = (recordMode == MODE_PREVIEW_ONLY)
+
+            // 如果在"仅预览"和"录像模式"之间切换，需要重新绑定相机用例
+            if (wasPreviewOnly != isPreviewOnly) {
+                Log.d(TAG, "模式跨越了仅预览边界，重新绑定相机用例: old=$oldMode, new=$recordMode")
+                startCamera()
+                return
+            }
+
             when (recordMode) {
                 MODE_CONTINUOUS -> {
                     if (oldMode != MODE_CONTINUOUS) {
@@ -328,6 +339,7 @@ class CameraService : LifecycleService() {
                         return@Analyzer
                     }
                     lastFrameTime = now
+                    val frameStartTs = now  // 用于统计整帧处理耗时
 
                     // 统计实际帧率（每秒刷新一次）
                     frameCount++
@@ -372,6 +384,9 @@ class CameraService : LifecycleService() {
                         }
                     }
 
+                    val frameCost = System.currentTimeMillis() - frameStartTs
+                    Log.d(TAG, "帧处理完成: 耗时=${frameCost}ms, 实际帧率约=${1000 / frameCost.coerceAtLeast(1)}fps")
+
                 } catch (e: Exception) {
                     Log.e(TAG, "帧分析错误", e)
                 } finally {
@@ -382,19 +397,28 @@ class CameraService : LifecycleService() {
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
             try {
-                val recorder = Recorder.Builder()
-                    .setQualitySelector(QualitySelector.from(Quality.SD))
-                    .build()
-                videoCapture = VideoCapture.withOutput(recorder)
-
                 cameraProvider?.unbindAll()
+
+                // 根据录像模式决定是否绑定 VideoCapture
+                val useCases = mutableListOf<UseCase>(imageAnalysis)
+                if (recordMode == MODE_CONTINUOUS || recordMode == MODE_MOTION_TRIGGERED) {
+                    val recorder = Recorder.Builder()
+                        .setQualitySelector(QualitySelector.from(Quality.SD))
+                        .build()
+                    videoCapture = VideoCapture.withOutput(recorder)
+                    useCases.add(videoCapture!!)
+                    Log.d(TAG, "相机绑定：ImageAnalysis + VideoCapture")
+                } else {
+                    videoCapture = null
+                    Log.d(TAG, "相机绑定：仅 ImageAnalysis（仅预览模式）")
+                }
+
                 cameraProvider?.bindToLifecycle(
                     this,
                     cameraSelector,
-                    imageAnalysis,
-                    videoCapture
+                    *useCases.toTypedArray()
                 )
-                Log.d(TAG, "相机绑定成功（含预览）")
+                Log.d(TAG, "相机绑定成功")
 
                 // 绑定成功后根据模式启动连续录像
                 if (recordMode == MODE_CONTINUOUS) {
@@ -448,12 +472,16 @@ class CameraService : LifecycleService() {
 
     private fun startClipRecording() {
         if (isRecording) return
+        val vc = videoCapture ?: run {
+            Log.w(TAG, "startClipRecording: videoCapture 为 null，无法开始录像")
+            return
+        }
         val dailyDir = getDailyRecordDir()
         val fileName = "motion_${System.currentTimeMillis()}.mp4"
         val file = File(dailyDir, fileName)
         val outputOptions = FileOutputOptions.Builder(file).build()
 
-        val pending = videoCapture.output
+        val pending = vc.output
             .prepareRecording(this, outputOptions)
             .apply {
                 // 如果已授予录音权限，则启用音频
@@ -531,13 +559,17 @@ class CameraService : LifecycleService() {
      */
     private fun startNewContinuousSegment() {
         if (!continuousRecording) return
+        val vc = videoCapture ?: run {
+            Log.w(TAG, "startNewContinuousSegment: videoCapture 为 null，无法开始录像")
+            return
+        }
 
         val dailyDir = getDailyRecordDir()
         val fileName = "video_${System.currentTimeMillis()}.mp4"
         val file = File(dailyDir, fileName)
         val outputOptions = FileOutputOptions.Builder(file).build()
 
-        val pending = videoCapture.output
+        val pending = vc.output
             .prepareRecording(this, outputOptions)
             .apply {
                 if (ActivityCompat.checkSelfPermission(this@CameraService, Manifest.permission.RECORD_AUDIO)
