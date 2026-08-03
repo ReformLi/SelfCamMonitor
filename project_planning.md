@@ -26,6 +26,8 @@
 | 后台保活          | 前台服务、唤醒锁、引导忽略电池优化                                                      |
 | 开机自启          | 代码支持，需用户授权（设置中可开关）                                                     |
 | 用户可配置参数       | 镜头朝向、分辨率、帧率、灵敏度、报警 URL/静默期、监控时段、录像模式与时长、HTTP 认证；除镜头/分辨率/帧率外均支持热重载      |
+| Web 端 HTML 查看页面 | `http://IP:8080/` 返回内嵌 HTML/CSS/JS 的查看页面，用 fetch Streaming API 读 MJPEG 流解析 JPEG 帧实现高帧率显示；四状态指示(连接中/已连接/已断开/推流关闭)、自动重连、画面旋转(0/90/180/270°)、缩放平移(1x~5x)、全屏模式 |
+| 连接状态检测        | `/status` 端点返回 JSON（mjpegEnabled/clientCount/lastFrameAge），`/snapshot` 端点返回最新 JPEG 帧，供心跳检测和备用访问 |
 
 ---
 
@@ -54,7 +56,7 @@
 | 功能          | 状态      | 说明                                |
 | ----------- | ------- | --------------------------------- |
 | 录像存储循环覆盖    | ❌ 未实现   | 无存储上限与自动清理逻辑，存储空间用尽前需手动清理录像       |
-| 画面镜像/旋转     | ❌ 未实现   | 部分安装姿态可能需要水平翻转                    |
+| 画面镜像（推流层）  | ❌ 未实现   | 推流画面不支持水平镜像；前端查看页面已支持显示旋转(0/90/180/270°)和缩放平移 |
 | 推流端口可配置     | ❌ 未实现   | 当前固定 8080，高级用户可修改                 |
 | 通知栏静默模式     | ❌ 未实现   | 隐藏通知图标但保留前台服务                     |
 
@@ -91,6 +93,15 @@
 - 视频列表：搜索栏内置搜索图标与清除按钮，键盘搜索键触发过滤；列表项以录制时间为标题、附类型标签（运动触发/连续录像），副行显示日期·时长·大小，文件名降级为次要信息；短按播放，长按多选删除/导出
 - 录制时间从文件名时间戳解析（`motion_<毫秒时间戳>.mp4` / `video_<毫秒时间戳>.mp4`），解析失败时回退为文件修改时间
 
+### 4. Web 端查看页面（浏览器访问 `http://IP:8080/`）
+
+- 顶部状态栏：状态圆点（连接中黄/已连接绿/已断开红/推流关闭灰）+ 状态文字 + FPS 显示 + 旋转按钮 + 全屏按钮
+- 画面区域：fetch Streaming API 读 MJPEG 流解析 JPEG 帧渲染，CSS transform 实现旋转/缩放/平移
+- 底部信息栏：客户端数量 + 实时时间
+- 全屏模式：隐藏顶/底栏，右上角浮层旋转/退出按钮
+- 自动重连：流断开后 2 秒自动重连，帧停滞 5 秒触发重连
+- 兼容性：所有现代手机/电脑浏览器均支持（fetch + ReadableStream 标准 API）
+
 ---
 
 ## 六、技术栈
@@ -100,6 +111,7 @@
 - 核心依赖：CameraX 1.6.1（core/camera2/lifecycle/view/video）、lifecycle-service、NanoHTTPD、OkHttp
 - 组件通信：标准广播 `RELOAD_CONFIG`（ContextCompat.registerReceiver + RECEIVER_NOT_EXPORTED，进程内热重载）
 - 推流：CameraX ImageAnalysis → YUV→NV21 → 字节级旋转 → JPEG 编码 → MJPEG over HTTP；每客户端独立推送线程，慢客户端自动丢帧
+- Web 查看页面：StreamServer 根路径 `/` 返回内嵌 HTML/CSS/JS；fetch Streaming API 读 `/video` MJPEG 流，JS 扫描 JPEG SOI/EOI 标记提取帧；`streamGen` 代际计数器防重连竞态，buffer 截断防溢出；CSS transform 合并 translate/rotate/scale 实现旋转缩放平移（GPU 加速）；`/status` JSON 心跳 + `/snapshot` 备用端点
 - 录像：CameraX VideoCapture（运动触发 + 连续分段，MP4 含音频）
 - 运动检测：直接对 Y 平面降采样做帧差比较（无编解码开销），灵敏度可映射为亮度差阈值
 - 报警：HTTP POST JSON to user-defined URL（含静默期）
