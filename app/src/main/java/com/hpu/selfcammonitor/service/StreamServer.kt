@@ -164,8 +164,9 @@ dot=document.getElementById('dot'),st=document.getElementById('st'),
 fps=document.getElementById('fps'),ov=document.getElementById('overlay'),
 ic=document.getElementById('ic'),it=document.getElementById('it'),
 container=document.getElementById('container');
-var SI=200,HI=3000,ST=5000;
-var rot=0,zoom=1,panX=0,panY=0,fc=0,lf=0,stat='connecting',stTimer=null,bu=null;
+var HI=3000,ST=5000;
+var rot=0,zoom=1,panX=0,panY=0,fc=0,lf=0,stat='connecting',bu=null;
+var streamReader=null,streamActive=false,streamGen=0,reconnectTimer=null;
 function setStatus(s){
   stat=s;dot.className=s;
   var t={connecting:'连接中...',live:'已连接',disconnected:'已断开，正在重连...',off:'推流已关闭'};
@@ -173,26 +174,62 @@ function setStatus(s){
   if(s==='disconnected'||s==='off'){ov.textContent=t[s];ov.classList.add('show');}
   else ov.classList.remove('show');
 }
-function fetchSnap(){
-  fetch('/snapshot',{cache:'no-store'}).then(function(r){
-    if(!r.ok)throw 0;return r.blob();
-  }).then(function(b){
-    if(b.size<100)throw 0;
-    if(bu)URL.revokeObjectURL(bu);
-    bu=URL.createObjectURL(b);img.src=bu;
-    lf=Date.now();fc++;if(stat!=='live')setStatus('live');
-  }).catch(function(){});
+function displayFrame(d){
+  if(d.length<100)return;
+  if(bu)URL.revokeObjectURL(bu);
+  bu=URL.createObjectURL(new Blob([d],{type:'image/jpeg'}));
+  img.src=bu;lf=Date.now();fc++;
+  if(stat!=='live')setStatus('live');
 }
-function startSnap(){if(stTimer)return;fetchSnap();stTimer=setInterval(fetchSnap,SI);}
-function stopSnap(){if(stTimer){clearInterval(stTimer);stTimer=null;}}
+function findM(a,m,f){for(var i=f;i<a.length-1;i++)if(a[i]===0xFF&&a[i+1]===m)return i;return -1;}
+async function startStream(){
+  if(streamActive)return;streamActive=true;
+  var gen=++streamGen;
+  try{
+    var r=await fetch('/video',{cache:'no-store'});
+    if(!r.ok||gen!==streamGen){if(gen===streamGen){streamActive=false;setStatus('disconnected');scheduleReconnect();}return;}
+    streamReader=r.body.getReader();
+    var buf=new Uint8Array(0);
+    while(true){
+      var rd=await streamReader.read();
+      if(gen!==streamGen)break;
+      if(rd.done)break;
+      var c=rd.value,nb=new Uint8Array(buf.length+c.length);
+      nb.set(buf);nb.set(c,buf.length);buf=nb;
+      for(;;){
+        var soi=findM(buf,0xD8,0);
+        if(soi<0){buf=new Uint8Array(0);break;}
+        var eoi=findM(buf,0xD9,soi+2);
+        if(eoi<0){if(soi>0)buf=buf.slice(soi);break;}
+        displayFrame(buf.slice(soi,eoi+2));
+        buf=buf.slice(eoi+2);
+      }
+      if(buf.length>500000)buf=buf.slice(-100000);
+    }
+  }catch(e){}
+  if(gen===streamGen){
+    streamActive=false;streamReader=null;
+    if(stat!=='off'){setStatus('disconnected');scheduleReconnect();}
+  }
+}
+function stopStream(){
+  streamGen++;streamActive=false;
+  if(streamReader){try{streamReader.cancel();}catch(e){}streamReader=null;}
+  if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;}
+}
+function scheduleReconnect(){
+  if(reconnectTimer)clearTimeout(reconnectTimer);
+  reconnectTimer=setTimeout(function(){reconnectTimer=null;if(stat!=='off'&&!streamActive){setStatus('connecting');startStream();}},2000);
+}
 function heartbeat(){
   fetch('/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(d){
-    if(!d.mjpegEnabled){setStatus('off');stopSnap();return;}
+    if(!d.mjpegEnabled){setStatus('off');stopStream();return;}
     ic.textContent='客户端：'+d.clientCount;
     it.textContent=new Date().toLocaleTimeString();
-    if(d.lastFrameAge>ST){setStatus('connecting');return;}
-    if(stat==='disconnected'){setStatus('connecting');startSnap();}
-  }).catch(function(){setStatus('disconnected');stopSnap();});
+    if(stat==='off'){setStatus('connecting');startStream();}
+  }).catch(function(){
+    if(stat!=='off'&&stat!=='disconnected')setStatus('disconnected');
+  });
 }
 setInterval(function(){
   var z=zoom>1.01?(Math.round(zoom*10)/10)+'x':'';
@@ -200,7 +237,7 @@ setInterval(function(){
   fc=0;
 },1000);
 setInterval(function(){
-  if(stat==='live'&&Date.now()-lf>ST){setStatus('connecting');stopSnap();startSnap();}
+  if(stat==='live'&&Date.now()-lf>ST){stopStream();setStatus('connecting');startStream();}
 },2000);
 function applyTransform(){
   wrapper.style.transform='translate('+panX+'px,'+panY+'px) rotate('+rot+'deg) scale('+zoom+')';
@@ -248,7 +285,7 @@ document.getElementById('btn-f').addEventListener('click',toggleFs);
 window.addEventListener('resize',applyTransform);
 document.addEventListener('fullscreenchange',applyTransform);
 document.addEventListener('webkitfullscreenchange',applyTransform);
-setStatus('connecting');startSnap();
+setStatus('connecting');startStream();
 setInterval(heartbeat,HI);heartbeat();
 </script>
 </body>
