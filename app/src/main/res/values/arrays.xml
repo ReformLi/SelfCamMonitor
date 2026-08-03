@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 镜头选择选项（顺序对应 camera_facing 配置值：0=后置，1=前置） -->
+    <string-array name="camera_facing_labels" translatable="false">
+        <item>后置摄像头</item>
+        <item>前置摄像头</item>
+    </string-array>
+
     <!-- 运动录像时长选项（显示文本） -->
     <string-array name="motion_duration_labels">
         <item>10秒</item>

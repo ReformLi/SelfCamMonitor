@@ -26,6 +26,7 @@ import com.hpu.selfcammonitor.service.CameraService
 class SettingsActivity : AppCompatActivity() {
     private lateinit var prefs: SharedPreferences
     private lateinit var spResolution: Spinner
+    private lateinit var spCameraFacing: Spinner
     private lateinit var seekBarFps: SeekBar
     private lateinit var tvFpsValue: TextView
     private lateinit var seekBarSensitivity: SeekBar
@@ -47,9 +48,16 @@ class SettingsActivity : AppCompatActivity() {
 
         prefs = getSharedPreferences("camera_prefs", MODE_PRIVATE)
 
+        spCameraFacing = findViewById(R.id.spinnerCameraFacing)
+        spCameraFacing.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item,
+            resources.getStringArray(R.array.camera_facing_labels)
+        )
+        spCameraFacing.setSelection(prefs.getInt("camera_facing", 0))
+
         spResolution = findViewById(R.id.spinnerResolution)
-        // 动态加载支持的分辨率
-        loadSupportedResolutions()
+        // 动态加载支持的分辨率（按所选镜头朝向枚举）
+        loadSupportedResolutions(prefs.getInt("camera_facing", 0))
         seekBarFps = findViewById(R.id.seekBarFps)
         tvFpsValue = findViewById(R.id.tvFpsValue)
         seekBarSensitivity = findViewById(R.id.seekBarSensitivity)
@@ -112,15 +120,20 @@ class SettingsActivity : AppCompatActivity() {
         if (continuousIndex >= 0) spinnerContinuousDuration.setSelection(continuousIndex)
     }
 
-    private fun loadSupportedResolutions() {
+    private fun loadSupportedResolutions(cameraFacing: Int) {
         val cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
         val resolutionItems = mutableListOf<String>()
 
         try {
+            val targetFacing = if (cameraFacing == 1) {
+                CameraCharacteristics.LENS_FACING_FRONT
+            } else {
+                CameraCharacteristics.LENS_FACING_BACK
+            }
             val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
                 val characteristics = cameraManager.getCameraCharacteristics(id)
                 val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
-                facing == CameraCharacteristics.LENS_FACING_BACK
+                facing == targetFacing
             } ?: cameraManager.cameraIdList[0]
 
             val characteristics = cameraManager.getCameraCharacteristics(cameraId)
@@ -157,6 +170,14 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        // 切换镜头时立即按新朝向重新枚举分辨率列表
+        spCameraFacing.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                loadSupportedResolutions(position)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
         seekBarFps.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                 tvFpsValue.text = "$progress fps"
@@ -211,6 +232,7 @@ class SettingsActivity : AppCompatActivity() {
 
         prefs.edit()
             .putString("resolution", resolution)   // 保存纯字符串
+            .putInt("camera_facing", spCameraFacing.selectedItemPosition)  // 镜头：0=后置，1=前置
             .putInt("fps", seekBarFps.progress)
             .putInt("sensitivity", seekBarSensitivity.progress)
             .putBoolean("boot_start", switchBoot.isChecked)

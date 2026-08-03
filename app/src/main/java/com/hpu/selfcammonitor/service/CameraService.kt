@@ -80,6 +80,7 @@ class CameraService : LifecycleService() {
     // 配置项
     private var mjpegEnabled = true
     private var motionDetectionEnabled = true
+    private var useFrontCamera = false   // 镜头选择：false=后置，true=前置（启动相机时生效）
 
     // 运动触发短视频录制（已验证可行）
 //    private lateinit var videoCapture: VideoCapture<Recorder>
@@ -218,6 +219,9 @@ class CameraService : LifecycleService() {
 
         // 帧率控制（每秒平均策略）
         targetFps = prefs.getInt("fps", 16).coerceIn(1, 30)
+
+        // 镜头选择（0=后置，1=前置）；与分辨率/帧率一样，启动相机时生效
+        useFrontCamera = prefs.getInt("camera_facing", 0) == 1
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -459,7 +463,23 @@ class CameraService : LifecycleService() {
                 }
             })
 
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+            // 根据配置选择镜头（0=后置，1=前置）；所选镜头不存在时回退后置
+            val desiredSelector = if (useFrontCamera) {
+                CameraSelector.DEFAULT_FRONT_CAMERA
+            } else {
+                CameraSelector.DEFAULT_BACK_CAMERA
+            }
+            val cameraSelector = try {
+                if (cameraProvider?.hasCamera(desiredSelector) == true) {
+                    desiredSelector
+                } else {
+                    if (useFrontCamera) Log.w(TAG, "前置摄像头不可用，回退到后置摄像头")
+                    CameraSelector.DEFAULT_BACK_CAMERA
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "检查摄像头可用性失败，使用后置摄像头", e)
+                CameraSelector.DEFAULT_BACK_CAMERA
+            }
 
             try {
                 cameraProvider?.unbindAll()
