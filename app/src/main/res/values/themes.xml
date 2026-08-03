@@ -60,6 +60,24 @@
         <item name="android:textColor">@color/text_primary</item>
     </style>
 
+    <!-- 描边输入框样式（统一 12dp 圆角，与卡片风格一致） -->
+    <style name="Widget.SelfCamMonitor.TextInput.Outlined" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxCornerRadiusTopStart">12dp</item>
+        <item name="boxCornerRadiusTopEnd">12dp</item>
+        <item name="boxCornerRadiusBottomStart">12dp</item>
+        <item name="boxCornerRadiusBottomEnd">12dp</item>
+        <item name="placeholderTextColor">@color/text_hint</item>
+    </style>
+
+    <!-- 下拉菜单样式（ExposedDropdownMenu，与描边输入框同外观） -->
+    <style name="Widget.SelfCamMonitor.TextInput.Dropdown" parent="Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+        <item name="boxCornerRadiusTopStart">12dp</item>
+        <item name="boxCornerRadiusTopEnd">12dp</item>
+        <item name="boxCornerRadiusBottomStart">12dp</item>
+        <item name="boxCornerRadiusBottomEnd">12dp</item>
+        <item name="placeholderTextColor">@color/text_hint</item>
+    </style>
+
     <style name="TextAppearance.SelfCamMonitor.Caption" parent="TextAppearance.Material3.BodySmall">
         <item name="android:textColor">@color/text_secondary</item>
     </style>

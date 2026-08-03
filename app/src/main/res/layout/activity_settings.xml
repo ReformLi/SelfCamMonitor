@@ -25,7 +25,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="12dp">
 
                 <TextView
                     android:layout_width="match_parent"
@@ -37,40 +37,34 @@
                     android:layout_marginBottom="16dp" />
 
                 <!-- 镜头选择 -->
-                <TextView
+                <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="镜头选择（切换后需重启监控生效）"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary"
-                    android:layout_marginBottom="8dp" />
+                    style="@style/Widget.SelfCamMonitor.TextInput.Dropdown"
+                    android:hint="镜头（切换后需重启监控）"
+                    android:layout_marginBottom="12dp">
 
-                <Spinner
-                    android:id="@+id/spinnerCameraFacing"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:paddingVertical="8dp"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="16dp" />
+                    <AutoCompleteTextView
+                        android:id="@+id/spinnerCameraFacing"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+                </com.google.android.material.textfield.TextInputLayout>
 
                 <!-- 推流分辨率 -->
-                <TextView
+                <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="推流分辨率"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary"
-                    android:layout_marginBottom="8dp" />
+                    style="@style/Widget.SelfCamMonitor.TextInput.Dropdown"
+                    android:hint="推流分辨率"
+                    android:layout_marginBottom="16dp">
 
-                <Spinner
-                    android:id="@+id/spinnerResolution"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:paddingVertical="8dp"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="16dp" />
+                    <AutoCompleteTextView
+                        android:id="@+id/spinnerResolution"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+                </com.google.android.material.textfield.TextInputLayout>
 
                 <!-- 推流帧率 -->
                 <TextView
@@ -79,14 +73,13 @@
                     android:text="推流帧率 (fps)"
                     android:textSize="14sp"
                     android:textColor="@color/text_secondary"
-                    android:layout_marginBottom="8dp" />
+                    android:layout_marginBottom="4dp" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="8dp">
+                    android:gravity="center_vertical">
 
                     <SeekBar
                         android:id="@+id/seekBarFps"
@@ -101,7 +94,7 @@
                         android:id="@+id/tvFpsValue"
                         android:layout_width="60dp"
                         android:layout_height="wrap_content"
-                        android:text="10 fps"
+                        android:text="16 fps"
                         android:textSize="14sp"
                         android:textColor="@color/text_primary" />
                 </LinearLayout>
@@ -121,7 +114,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="12dp">
 
                 <TextView
                     android:layout_width="match_parent"
@@ -138,13 +131,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginBottom="8dp">
+                    android:layout_marginBottom="4dp">
 
                     <TextView
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="检测灵敏度 (0-100)"
+                        android:text="检测灵敏度 (0-100，数值越小越敏感)"
                         android:textSize="14sp"
                         android:textColor="@color/text_secondary" />
 
@@ -181,83 +174,83 @@
                         android:textColor="@color/text_primary" />
                 </LinearLayout>
 
-                <!-- 报警静默期 -->
-                <TextView
+                <!-- 报警静默期 + 运动录像时长（并排紧凑布局） -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="报警静默期(秒)"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary"
-                    android:layout_marginBottom="8dp" />
+                    android:orientation="horizontal"
+                    android:baselineAligned="false">
 
-                <EditText
-                    android:id="@+id/etAlertQuiet"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="number"
-                    android:minHeight="48dp"
-                    android:gravity="center_vertical"
-                    android:paddingStart="12dp"
-                    android:text="30"
-                    android:hint="30"
-                    android:layout_marginBottom="16dp" />
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="2"
+                        style="@style/Widget.SelfCamMonitor.TextInput.Outlined"
+                        android:hint="静默期"
+                        app:suffixText="秒"
+                        android:layout_marginEnd="12dp">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etAlertQuiet"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="number"
+                            android:text="30" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="3"
+                        style="@style/Widget.SelfCamMonitor.TextInput.Dropdown"
+                        android:hint="运动录像时长">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/spinner_motion_duration"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
 
                 <!-- 报警 URL -->
-                <TextView
+                <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="报警接收URL"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary"
-                    android:layout_marginBottom="8dp" />
+                    style="@style/Widget.SelfCamMonitor.TextInput.Outlined"
+                    android:hint="报警接收 URL"
+                    app:placeholderText="http://192.168.1.100:3000"
+                    app:helperText="触发运动时向该地址发送 POST 请求，留空则不发送"
+                    android:layout_marginTop="12dp">
 
-                <EditText
-                    android:id="@+id/etAlertUrl"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:gravity="center_vertical"
-                    android:paddingStart="12dp"
-                    android:hint="http://127.0.0.1:3000/motion"
-                    android:inputType="textUri" />
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etAlertUrl"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textUri" />
+                </com.google.android.material.textfield.TextInputLayout>
 
-                <!-- 运动录像时长 -->
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="运动录像时长"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginBottom="8dp" />
 
-                <Spinner
-                    android:id="@+id/spinner_motion_duration"
+                <View
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:entries="@array/motion_duration_labels"
-                    android:minHeight="48dp"
-                    android:paddingVertical="8dp"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="16dp" />
+                    android:layout_height="1dp"
+                    android:background="@color/divider"
+                    android:layout_marginVertical="5dp" />
 
                 <!-- 连续录像分段时长 -->
-                <TextView
+                <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="连续录像分段时长"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary"
-                    android:layout_marginBottom="8dp" />
+                    style="@style/Widget.SelfCamMonitor.TextInput.Dropdown"
+                    android:hint="连续录像分段时长（修改对下一片段生效）"
+                    android:layout_marginTop="12dp">
 
-                <Spinner
-                    android:id="@+id/spinner_continuous_duration"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:paddingVertical="8dp"
-                    android:gravity="center_vertical"
-                    android:entries="@array/continuous_duration_labels" />
+                    <AutoCompleteTextView
+                        android:id="@+id/spinner_continuous_duration"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+                </com.google.android.material.textfield.TextInputLayout>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
@@ -273,7 +266,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="12dp">
 
                 <TextView
                     android:layout_width="match_parent"
@@ -321,60 +314,62 @@
                         app:trackTint="@color/track_tint" />
                 </LinearLayout>
 
-                <!-- 监控时间限制 -->
-                <TextView
+                <View
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="监控时间限制"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary"
-                    android:layout_marginBottom="8dp" />
+                    android:layout_height="1dp"
+                    android:background="@color/divider"
+                    android:layout_marginVertical="5dp" />
 
+                <!-- 监控时间限制（开始/结束并排） -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical">
+                    android:baselineAligned="false">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="开始"
-                        android:textSize="14sp"
-                        android:textColor="@color/text_secondary"
-                        android:layout_marginEnd="8dp" />
-
-                    <EditText
-                        android:id="@+id/etStartTime"
+                    <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:minHeight="48dp"
-                        android:gravity="center_vertical"
-                        android:paddingStart="12dp"
-                        android:hint="00:00"
-                        android:inputType="time"
-                        android:layout_marginEnd="16dp" />
+                        style="@style/Widget.SelfCamMonitor.TextInput.Outlined"
+                        android:hint="监控开始时间"
+                        app:placeholderText="00:00"
+                        app:endIconMode="clear_text"
+                        android:layout_marginEnd="12dp">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="结束"
-                        android:textSize="14sp"
-                        android:textColor="@color/text_secondary"
-                        android:layout_marginEnd="8dp" />
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etStartTime"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:focusable="false" />
+                    </com.google.android.material.textfield.TextInputLayout>
 
-                    <EditText
-                        android:id="@+id/etEndTime"
+                    <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:minHeight="48dp"
-                        android:gravity="center_vertical"
-                        android:paddingStart="12dp"
-                        android:hint="23:59"
-                        android:inputType="time" />
+                        style="@style/Widget.SelfCamMonitor.TextInput.Outlined"
+                        android:hint="监控结束时间"
+                        app:placeholderText="23:59"
+                        app:endIconMode="clear_text">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etEndTime"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:focusable="false" />
+                    </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="点击选择时间；清空或起止相同表示全天监控，支持跨天时段（如 22:00 ~ 06:00）"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginTop="8dp" />
 
             </LinearLayout>
         </androidx.cardview.widget.CardView>
@@ -402,38 +397,52 @@
                     android:textColor="@color/text_primary"
                     android:layout_marginBottom="16dp" />
 
-                <!-- 用户名 -->
+                <!-- 用户名 + 密码（并排紧凑布局） -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:baselineAligned="false">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        style="@style/Widget.SelfCamMonitor.TextInput.Outlined"
+                        android:hint="认证用户名"
+                        app:placeholderText="admin"
+                        android:layout_marginEnd="12dp">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etUsername"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="text" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        style="@style/Widget.SelfCamMonitor.TextInput.Outlined"
+                        android:hint="认证密码"
+                        app:endIconMode="password_toggle">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etPassword"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textPassword" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="HTTP认证用户名"
-                    android:textSize="14sp"
+                    android:text="留空则不启用认证，浏览器可直接观看视频流"
+                    android:textSize="12sp"
                     android:textColor="@color/text_secondary"
-                    android:layout_marginBottom="8dp" />
-
-                <EditText
-                    android:id="@+id/etUsername"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="admin"
-                    android:inputType="text"
-                    android:layout_marginBottom="16dp" />
-
-                <!-- 密码 -->
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="HTTP认证密码"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary"
-                    android:layout_marginBottom="8dp" />
-
-                <EditText
-                    android:id="@+id/etPassword"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="输入密码"
-                    android:inputType="textPassword" />
+                    android:layout_marginTop="8dp" />
 
             </LinearLayout>
         </androidx.cardview.widget.CardView>
@@ -444,22 +453,25 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnCancel"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="取消"
                 android:textSize="16sp"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                app:cornerRadius="12dp"
                 android:layout_marginEnd="8dp" />
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSave"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="保存设置"
                 android:textSize="16sp"
+                app:cornerRadius="12dp"
                 android:backgroundTint="@color/primary"
                 android:layout_marginStart="8dp" />
         </LinearLayout>

@@ -7,14 +7,15 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.os.Bundle
 import android.util.Log
-import android.view.View
-import android.widget.AdapterView
+import android.view.Gravity
 import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.NumberPicker
 import android.widget.SeekBar
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -25,8 +26,8 @@ import com.hpu.selfcammonitor.service.CameraService
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var prefs: SharedPreferences
-    private lateinit var spResolution: Spinner
-    private lateinit var spCameraFacing: Spinner
+    private lateinit var spResolution: AutoCompleteTextView
+    private lateinit var spCameraFacing: AutoCompleteTextView
     private lateinit var seekBarFps: SeekBar
     private lateinit var tvFpsValue: TextView
     private lateinit var seekBarSensitivity: SeekBar
@@ -39,8 +40,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var etUsername: EditText
     private lateinit var etPassword: EditText
 
-    private lateinit var spinnerMotionDuration: Spinner
-    private lateinit var spinnerContinuousDuration: Spinner
+    private lateinit var spinnerMotionDuration: AutoCompleteTextView
+    private lateinit var spinnerContinuousDuration: AutoCompleteTextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,11 +50,11 @@ class SettingsActivity : AppCompatActivity() {
         prefs = getSharedPreferences("camera_prefs", MODE_PRIVATE)
 
         spCameraFacing = findViewById(R.id.spinnerCameraFacing)
-        spCameraFacing.adapter = ArrayAdapter(
-            this, android.R.layout.simple_spinner_dropdown_item,
-            resources.getStringArray(R.array.camera_facing_labels)
+        val facingLabels = resources.getStringArray(R.array.camera_facing_labels)
+        spCameraFacing.setAdapter(
+            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, facingLabels)
         )
-        spCameraFacing.setSelection(prefs.getInt("camera_facing", 0))
+        spCameraFacing.setText(facingLabels[prefs.getInt("camera_facing", 0)], false)
 
         spResolution = findViewById(R.id.spinnerResolution)
         // 动态加载支持的分辨率（按所选镜头朝向枚举）
@@ -70,7 +71,19 @@ class SettingsActivity : AppCompatActivity() {
         etUsername = findViewById(R.id.etUsername)
         etPassword = findViewById(R.id.etPassword)
         spinnerMotionDuration = findViewById(R.id.spinner_motion_duration)
+        spinnerMotionDuration.setAdapter(
+            ArrayAdapter(
+                this, android.R.layout.simple_spinner_dropdown_item,
+                resources.getStringArray(R.array.motion_duration_labels)
+            )
+        )
         spinnerContinuousDuration = findViewById(R.id.spinner_continuous_duration)
+        spinnerContinuousDuration.setAdapter(
+            ArrayAdapter(
+                this, android.R.layout.simple_spinner_dropdown_item,
+                resources.getStringArray(R.array.continuous_duration_labels)
+            )
+        )
 
         loadSettings()
         setupListeners()
@@ -110,14 +123,16 @@ class SettingsActivity : AppCompatActivity() {
         // 加载运动录像时长（秒）
         val motionSec = prefs.getInt("motion_clip_sec", CameraService.Companion.DEFAULT_MOTION_CLIP_SEC)
         val motionValues = resources.getStringArray(R.array.motion_duration_values)
+        val motionLabels = resources.getStringArray(R.array.motion_duration_labels)
         val motionIndex = motionValues.indexOf(motionSec.toString())
-        if (motionIndex >= 0) spinnerMotionDuration.setSelection(motionIndex)
+        if (motionIndex >= 0) spinnerMotionDuration.setText(motionLabels[motionIndex], false)
 
-// 加载连续录像分段时长（秒）
+        // 加载连续录像分段时长（秒）
         val continuousSec = prefs.getInt("continuous_segment_sec", CameraService.Companion.DEFAULT_CONTINUOUS_SEGMENT_SEC)
         val continuousValues = resources.getStringArray(R.array.continuous_duration_values)
+        val continuousLabels = resources.getStringArray(R.array.continuous_duration_labels)
         val continuousIndex = continuousValues.indexOf(continuousSec.toString())
-        if (continuousIndex >= 0) spinnerContinuousDuration.setSelection(continuousIndex)
+        if (continuousIndex >= 0) spinnerContinuousDuration.setText(continuousLabels[continuousIndex], false)
     }
 
     private fun loadSupportedResolutions(cameraFacing: Int) {
@@ -160,22 +175,19 @@ class SettingsActivity : AppCompatActivity() {
             resolutionItems.addAll(listOf("320x240", "640x480", "1280x720", "1920x1080"))
         }
 
-        spResolution.adapter = ArrayAdapter(
-            this, android.R.layout.simple_spinner_dropdown_item, resolutionItems
+        spResolution.setAdapter(
+            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, resolutionItems)
         )
 
         val savedRes = prefs.getString("resolution", "640x480") ?: "640x480"
         val index = resolutionItems.indexOf(savedRes).coerceAtLeast(0)
-        spResolution.setSelection(index)
+        spResolution.setText(resolutionItems[index], false)
     }
 
     private fun setupListeners() {
         // 切换镜头时立即按新朝向重新枚举分辨率列表
-        spCameraFacing.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                loadSupportedResolutions(position)
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        spCameraFacing.setOnItemClickListener { _, _, position, _ ->
+            loadSupportedResolutions(position)
         }
 
         seekBarFps.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -193,25 +205,73 @@ class SettingsActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar) {}
         })
 
-        spinnerMotionDuration.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val values = resources.getStringArray(R.array.motion_duration_values)
-                val seconds = values[position].toInt()
-                prefs.edit().putInt("motion_clip_sec", seconds).apply()
-                sendReloadBroadcast()   // 实时通知服务生效
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        spinnerMotionDuration.setOnItemClickListener { _, _, position, _ ->
+            val values = resources.getStringArray(R.array.motion_duration_values)
+            val seconds = values[position].toInt()
+            prefs.edit().putInt("motion_clip_sec", seconds).apply()
+            sendReloadBroadcast()   // 实时通知服务生效
         }
 
-        spinnerContinuousDuration.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val values = resources.getStringArray(R.array.continuous_duration_values)
-                val seconds = values[position].toInt()
-                prefs.edit().putInt("continuous_segment_sec", seconds).apply()
-                sendReloadBroadcast()
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        spinnerContinuousDuration.setOnItemClickListener { _, _, position, _ ->
+            val values = resources.getStringArray(R.array.continuous_duration_values)
+            val seconds = values[position].toInt()
+            prefs.edit().putInt("continuous_segment_sec", seconds).apply()
+            sendReloadBroadcast()
         }
+
+        // 监控时间段：点击弹出时间选择器，不允许手动输入
+        etStartTime.setOnClickListener { showTimePicker(etStartTime, "选择监控开始时间") }
+        etEndTime.setOnClickListener { showTimePicker(etEndTime, "选择监控结束时间") }
+    }
+
+    /**
+     * 弹出紧凑的滚轮时间选择器（小时 + 分钟），选中后以 HH:mm 格式回填目标输入框。
+     * 相比系统时钟样式弹框更小巧，圆角与按钮颜色跟随应用 Material3 主题。
+     */
+    private fun showTimePicker(target: EditText, title: String) {
+        val parts = target.text.toString().split(":")
+        val initHour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 0
+        val initMinute = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
+
+        val density = resources.displayMetrics.density
+        val hourPicker = NumberPicker(this).apply {
+            minValue = 0
+            maxValue = 23
+            value = initHour
+            wrapSelectorWheel = true
+            setFormatter { "%02d".format(it) }
+        }
+        val minutePicker = NumberPicker(this).apply {
+            minValue = 0
+            maxValue = 59
+            value = initMinute
+            wrapSelectorWheel = true
+            setFormatter { "%02d".format(it) }
+        }
+        val colon = TextView(this).apply {
+            text = ":"
+            textSize = 22f
+            setTextColor(getColor(R.color.text_primary))
+            setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
+        }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            val vp = (12 * density).toInt()
+            setPadding(0, vp, 0, vp)
+            addView(hourPicker)
+            addView(colon)
+            addView(minutePicker)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(container)
+            .setPositiveButton("确定") { _, _ ->
+                target.setText("%02d:%02d".format(hourPicker.value, minutePicker.value))
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun sendReloadBroadcast() {
@@ -220,19 +280,20 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun saveSettings() {
-        // 获取下标，从 values 数组取纯尺寸
-//        val resolutionIndex = spResolution.selectedItemPosition
-//        val resolution = resources.getStringArray(R.array.resolution_values)[resolutionIndex]
-        val resolution = spResolution.selectedItem.toString()
-        // 在 saveSettings() 的 apply() 之前添加
+        // 下拉框取值：读取显示文本并反查对应索引
+        val resolution = spResolution.text.toString()
+        val facingLabels = resources.getStringArray(R.array.camera_facing_labels)
+        val cameraFacing = facingLabels.indexOf(spCameraFacing.text.toString()).coerceAtLeast(0)
+        val motionLabels = resources.getStringArray(R.array.motion_duration_labels)
         val motionValues = resources.getStringArray(R.array.motion_duration_values)
-        val motionSec = motionValues[spinnerMotionDuration.selectedItemPosition].toInt()
+        val motionSec = motionValues[motionLabels.indexOf(spinnerMotionDuration.text.toString()).coerceAtLeast(0)].toInt()
+        val continuousLabels = resources.getStringArray(R.array.continuous_duration_labels)
         val continuousValues = resources.getStringArray(R.array.continuous_duration_values)
-        val continuousSec = continuousValues[spinnerContinuousDuration.selectedItemPosition].toInt()
+        val continuousSec = continuousValues[continuousLabels.indexOf(spinnerContinuousDuration.text.toString()).coerceAtLeast(0)].toInt()
 
         prefs.edit()
             .putString("resolution", resolution)   // 保存纯字符串
-            .putInt("camera_facing", spCameraFacing.selectedItemPosition)  // 镜头：0=后置，1=前置
+            .putInt("camera_facing", cameraFacing)  // 镜头：0=后置，1=前置
             .putInt("fps", seekBarFps.progress)
             .putInt("sensitivity", seekBarSensitivity.progress)
             .putBoolean("boot_start", switchBoot.isChecked)
