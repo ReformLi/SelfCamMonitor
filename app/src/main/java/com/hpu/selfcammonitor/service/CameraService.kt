@@ -217,7 +217,7 @@ class CameraService : LifecycleService() {
         continuousSegmentDurationMs = prefs.getInt("continuous_segment_sec", DEFAULT_CONTINUOUS_SEGMENT_SEC) * 1000L
 
         // 帧率控制（每秒平均策略）
-        targetFps = prefs.getInt("fps", 10).coerceIn(1, 30)
+        targetFps = prefs.getInt("fps", 16).coerceIn(1, 30)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

@@ -83,7 +83,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun loadSettings() {
-        var fps = prefs.getInt("fps", 10)
+        var fps = prefs.getInt("fps", 16)
         if (fps > 30) fps = 30
         seekBarFps.progress = fps
         tvFpsValue.text = "${seekBarFps.progress} fps"
