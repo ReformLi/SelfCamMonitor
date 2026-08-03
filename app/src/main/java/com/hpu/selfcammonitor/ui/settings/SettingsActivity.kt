@@ -12,10 +12,12 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.switchmaterial.SwitchMaterial
@@ -70,6 +72,14 @@ class SettingsActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.btnCancel).setOnClickListener {
             finish()   // 返回上一页（主界面）
+        }
+
+        findViewById<ImageView>(R.id.btnHelpSensitivity).setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("检测灵敏度说明")
+                .setMessage("动作识别灵敏度数值越低越敏感。\n\n数值越小，越轻微的画面变化就会触发运动检测；数值越大，需要更明显的画面变化才会触发。")
+                .setPositiveButton("知道了", null)
+                .show()
         }
     }
 
