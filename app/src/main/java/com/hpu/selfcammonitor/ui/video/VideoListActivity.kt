@@ -172,24 +172,17 @@ class VideoListActivity : AppCompatActivity() {
     }
 
     private fun extractDateTimeFromFileName(fileName: String): String? {
-        val motionPattern = Regex("motion_(\\d{12})_\\d{3}\\.mp4")
-        motionPattern.find(fileName)?.let {
-            val dateTimePart = it.groupValues[1]
+        // 文件名由 CameraService 生成：
+        //   运动触发录像 motion_<Unix毫秒时间戳>.mp4
+        //   连续录像     video_<Unix毫秒时间戳>.mp4
+        val pattern = Regex("(?:motion|video)_(\\d+)\\.mp4")
+        pattern.find(fileName)?.let {
+            val timestamp = it.groupValues[1].toLongOrNull() ?: return null
             return try {
-                val sdf = SimpleDateFormat("yyMMddHHmmss", Locale.getDefault())
-                val date = sdf.parse(dateTimePart) ?: return null
-                SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(date)
+                SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                    .format(Date(timestamp))
             } catch (e: Exception) {
                 null
-            }
-        }
-
-        val continuousPattern = Regex("continuous_(\\d+)\\.mp4")
-        continuousPattern.find(fileName)?.let {
-            val timestamp = it.groupValues[1].toLongOrNull()
-            if (timestamp != null) {
-                val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                return sdf.format(Date(timestamp))
             }
         }
         return null

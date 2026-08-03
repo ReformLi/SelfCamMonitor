@@ -503,8 +503,8 @@ class CameraService : LifecycleService() {
 //        val timestamp = System.currentTimeMillis()
 //        val date = Date(timestamp)
 //
-//        // 紧凑格式：YYMMDDHHmmss（12位） + 毫秒后3位
-//        val formatter = SimpleDateFormat("yyyyMMDDHHmm", Locale.getDefault())
+//        // 紧凑格式：YYMMddHHmmss（12位） + 毫秒后3位
+//        val formatter = SimpleDateFormat("yyyyMMddHHmm", Locale.getDefault())
 //        val dateTimePart = formatter.format(date)
 //        // 获取时间戳最后3位并补零（如 012）
 //        val lastThreeDigits = (timestamp % 1000).toString().padStart(3, '0')
