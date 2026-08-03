@@ -81,6 +81,8 @@ class CameraService : LifecycleService() {
     private var mjpegEnabled = true
     private var motionDetectionEnabled = true
     private var useFrontCamera = false   // 镜头选择：false=后置，true=前置（启动相机时生效）
+    private var actualCameraFacing = 0   // 实际绑定的镜头朝向：0=后置，1=前置（回退场景下与配置可能不同）
+    private var actualResolution = "--"  // 实际绑定的推流分辨率（回退策略下可能与设置值不同）
 
     // 运动触发短视频录制（已验证可行）
 //    private lateinit var videoCapture: VideoCapture<Recorder>
@@ -480,6 +482,7 @@ class CameraService : LifecycleService() {
                 Log.w(TAG, "检查摄像头可用性失败，使用后置摄像头", e)
                 CameraSelector.DEFAULT_BACK_CAMERA
             }
+            actualCameraFacing = if (cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) 1 else 0
 
             try {
                 cameraProvider?.unbindAll()
@@ -505,6 +508,20 @@ class CameraService : LifecycleService() {
                 ).also { camera ->
                     // 只读诊断：打印传感器在该分辨率下的可达帧率上限
                     logCameraFpsCap(camera, targetWidth, targetHeight)
+                    // 读取实际绑定的输出分辨率（回退策略下可能与设置值不同），同步给主界面
+                    try {
+                        val size = imageAnalysis.resolutionInfo?.resolution
+                        if (size != null) {
+                            val newRes = "${size.width}x${size.height}"
+                            if (newRes != actualResolution) {
+                                actualResolution = newRes
+                                Log.d(TAG, "实际推流分辨率: $actualResolution")
+                                sendStatusBroadcast()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "读取实际推流分辨率失败", e)
+                    }
                 }
                 Log.d(TAG, "相机绑定成功")
 
@@ -824,6 +841,8 @@ class CameraService : LifecycleService() {
         intent.putExtra("running", true)
         intent.putExtra("mjpeg_enabled", mjpegEnabled)
         intent.putExtra("motion_detection_enabled", motionDetectionEnabled)
+        intent.putExtra("camera_facing", actualCameraFacing)  // 实际使用的镜头：0=后置，1=前置
+        intent.putExtra("resolution", actualResolution)        // 实际推流分辨率，如 "640x480"
         sendBroadcast(intent)
     }
 

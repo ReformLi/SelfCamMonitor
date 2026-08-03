@@ -31,6 +31,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var tvIpAddress: TextView
     private lateinit var tvStatus: TextView
+    private lateinit var tvCameraFacing: TextView
+    private lateinit var tvResolution: TextView
     private lateinit var switchMjpeg: SwitchMaterial
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
@@ -64,7 +66,11 @@ class MainActivity : AppCompatActivity() {
             if (intent.action == "com.hpu.selfcammonitor.SERVICE_STATUS") {
                 val ip = intent.getStringExtra("ip") ?: "未知"
                 val running = intent.getBooleanExtra("running", false)
+                val facing = intent.getIntExtra("camera_facing", 0)
+                val resolution = intent.getStringExtra("resolution") ?: "--"
                 tvIpAddress.text = "IP 地址: $ip"
+                tvCameraFacing.text = "摄像头: ${if (facing == 1) "前置" else "后置"}"
+                tvResolution.text = "分辨率: $resolution"
                 updateUI(running)
             }
         }
@@ -87,6 +93,8 @@ class MainActivity : AppCompatActivity() {
         // 绑定视图
         tvIpAddress = findViewById(R.id.tvIpAddress)
         tvStatus = findViewById(R.id.tvStatus)
+        tvCameraFacing = findViewById(R.id.tvCameraFacing)
+        tvResolution = findViewById(R.id.tvResolution)
         switchMjpeg = findViewById(R.id.switchMjpeg)
 
         btnStart = findViewById(R.id.btnStart)
@@ -295,6 +303,8 @@ class MainActivity : AppCompatActivity() {
             tvStatus.text = "服务已停止"
             tvStatus.setTextColor(getColor(android.R.color.holo_red_dark))
             tvFps.text = "帧率: -- fps"
+            tvCameraFacing.text = "摄像头: --"
+            tvResolution.text = "分辨率: --"
         }
 
         // 按钮状态控制：运行时启动按钮置灰，停止按钮可用；停止时相反
