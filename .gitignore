@@ -14,6 +14,7 @@ app/release/
 # 整个 .idea 目录（包含项目特定配置）
 .idea/
 .claude/
+.workbuddy/
 # IntelliJ 模块文件（每次 Gradle 同步后会自动生成）
 *.iml
 # 特定用户的工作区文件（包含个人设置）
