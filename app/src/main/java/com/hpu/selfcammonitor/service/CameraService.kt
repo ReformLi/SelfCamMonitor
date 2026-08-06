@@ -814,6 +814,7 @@ class CameraService : LifecycleService() {
             frameCount = 0
             fpsWindowStart = now
             val fpsIntent = Intent("com.hpu.selfcammonitor.FPS_UPDATE")
+            fpsIntent.setPackage(packageName)  // 显式广播：防系统过滤隐式广播
             fpsIntent.putExtra("fps", currentFps)
             sendBroadcast(fpsIntent)
 
@@ -848,6 +849,7 @@ class CameraService : LifecycleService() {
     private fun sendStatusBroadcast() {
         val ip = getLocalIpAddress()
         val intent = Intent("com.hpu.selfcammonitor.SERVICE_STATUS")
+        intent.setPackage(packageName)  // 显式广播：防系统过滤隐式广播
         intent.putExtra("ip", ip)
         intent.putExtra("running", true)
         intent.putExtra("mjpeg_enabled", mjpegEnabled)

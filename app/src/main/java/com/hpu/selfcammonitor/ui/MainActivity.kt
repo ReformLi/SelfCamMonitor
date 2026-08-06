@@ -130,6 +130,7 @@ class MainActivity : AppCompatActivity() {
         switchMjpeg.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("mjpeg_enabled", isChecked).apply()
             val intent = Intent("com.hpu.selfcammonitor.RELOAD_CONFIG")
+            intent.setPackage(packageName)  // 显式广播：防系统过滤隐式广播
             sendBroadcast(intent)
         }
 
@@ -223,6 +224,7 @@ class MainActivity : AppCompatActivity() {
     private fun saveAndNotifyMode(mode: Int) {
         prefs.edit().putInt("record_mode", mode).apply()
         val intent = Intent("com.hpu.selfcammonitor.RELOAD_CONFIG")
+        intent.setPackage(packageName)  // 显式广播：防系统过滤隐式广播
         sendBroadcast(intent)
     }
 

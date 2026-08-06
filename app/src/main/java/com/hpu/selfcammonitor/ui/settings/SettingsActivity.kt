@@ -299,6 +299,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun sendReloadBroadcast() {
         val intent = Intent("com.hpu.selfcammonitor.RELOAD_CONFIG")
+        intent.setPackage(packageName)  // 显式广播：防系统过滤隐式广播
         sendBroadcast(intent)
     }
 
@@ -332,7 +333,7 @@ class SettingsActivity : AppCompatActivity() {
 
         Toast.makeText(this, "设置已保存", Toast.LENGTH_SHORT).show()
         // 发送广播通知服务重新加载
-        sendBroadcast(Intent("com.hpu.selfcammonitor.RELOAD_CONFIG"))
+        sendBroadcast(Intent("com.hpu.selfcammonitor.RELOAD_CONFIG").setPackage(packageName))
         finish()
     }
 }
