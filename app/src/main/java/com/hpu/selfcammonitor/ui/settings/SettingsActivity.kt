@@ -140,7 +140,7 @@ class SettingsActivity : AppCompatActivity() {
         etAlertQuiet.setText(prefs.getInt("alert_quiet", 30).toString())
         etStartTime.setText(prefs.getString("monitor_start", ""))
         etEndTime.setText(prefs.getString("monitor_end", ""))
-        etUsername.setText(prefs.getString("http_user", "admin"))
+        etUsername.setText(prefs.getString("http_user", ""))
         etPassword.setText(prefs.getString("http_pass", ""))
 
         // 加载运动录像时长（秒）

@@ -164,8 +164,9 @@ class CameraService : LifecycleService() {
         const val MODE_MOTION_TRIGGERED = 1 // 运动触发录像
         const val MODE_PREVIEW_ONLY = 2    // 仅预览（不录像、不运动检测）
 
-        // 默认值
-        const val DEFAULT_MODE = MODE_MOTION_TRIGGERED
+        // 默认值（DEFAULT_MODE 与 MainActivity 读取 record_mode 的默认值保持一致，
+        // 避免首次安装无配置键时界面显示"仅预览"而服务实际跑运动检测）
+        const val DEFAULT_MODE = MODE_PREVIEW_ONLY
         const val DEFAULT_MOTION_CLIP_SEC = 10      // 秒
         const val DEFAULT_CONTINUOUS_SEGMENT_SEC = 600 // 10分钟
     }
@@ -192,8 +193,9 @@ class CameraService : LifecycleService() {
         mjpegEnabled = prefs.getBoolean("mjpeg_enabled", true)
         motionDetectionEnabled = prefs.getBoolean("motion_detection_enabled", true)
 
-        streamServer.username = prefs.getString("http_user", null)
-        streamServer.password = prefs.getString("http_pass", null)
+        // HTTP 认证（空白视为未配置，认证关闭）
+        streamServer.username = prefs.getString("http_user", null)?.takeIf { it.isNotBlank() }
+        streamServer.password = prefs.getString("http_pass", null)?.takeIf { it.isNotBlank() }
 
         // 同步给 StreamServer
         streamServer.isMjpegEnabled = mjpegEnabled
