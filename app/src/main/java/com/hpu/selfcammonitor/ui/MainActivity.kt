@@ -55,6 +55,15 @@ class MainActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
             val cameraGranted = permissions[Manifest.permission.CAMERA] ?: false
             if (cameraGranted) {
+                // 通知权限：Android 13+ 未授予时前台服务通知不显示，提示但不阻断启动
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    permissions[Manifest.permission.POST_NOTIFICATIONS] == false) {
+                    Toast.makeText(this, "建议授予通知权限，否则通知栏看不到监控状态", Toast.LENGTH_LONG).show()
+                }
+                // 录音权限非强制：未授予时录像不含音频
+                if (permissions[Manifest.permission.RECORD_AUDIO] == false) {
+                    Toast.makeText(this, "未授予录音权限，录像将不含音频", Toast.LENGTH_SHORT).show()
+                }
                 startCameraService()
             } else {
                 Toast.makeText(this, "需要相机权限才能运行", Toast.LENGTH_SHORT).show()
@@ -235,27 +244,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---------- 权限相关 ----------
+    // 只把相机权限作为启动的必要条件：录音未授权时录像降级为无声，
+    // 若两者都强制，用户永久拒绝录音后将无法启动监控
     private fun hasRequiredPermissions(): Boolean {
-        val cameraGranted = ContextCompat.checkSelfPermission(
+        return ContextCompat.checkSelfPermission(
             this, Manifest.permission.CAMERA
         ) == PackageManager.PERMISSION_GRANTED
-
-        // 录音权限非强制，但为获得有声视频建议请求
-        val audioGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            ContextCompat.checkSelfPermission(
-                this, Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
-
-        return cameraGranted && audioGranted
     }
 
     private fun requestRequiredPermissions() {
         val permissions = mutableListOf(Manifest.permission.CAMERA)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             permissions.add(Manifest.permission.RECORD_AUDIO)
+        }
+        // Android 13+ 需运行时请求通知权限，否则前台服务通知不显示
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         requestPermissionLauncher.launch(permissions.toTypedArray())
     }

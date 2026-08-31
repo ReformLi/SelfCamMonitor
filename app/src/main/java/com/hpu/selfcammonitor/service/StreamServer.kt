@@ -34,7 +34,7 @@ class StreamServer(port: Int = 8080) : NanoHTTPD(port) {
             }
             val cred = String(
                 Base64.decode(auth.substring(6), Base64.DEFAULT)
-            ).split(":")
+            ).split(":", limit = 2)  // limit=2：密码本身含":"时也能正确切分
             if (cred.size != 2 || cred[0] != username || cred[1] != password) {
                 val res = newFixedLengthResponse(
                     Response.Status.UNAUTHORIZED, "text/plain", "认证失败"

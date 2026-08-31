@@ -274,7 +274,15 @@ class CameraService : LifecycleService() {
 
         val ipAddress = getLocalIpAddress()
         val notification = buildNotification(ipAddress)
-        startForeground(NOTIFICATION_ID, notification)
+        try {
+            startForeground(NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            // Android 14+ 从后台（如开机广播）启动 camera 类型前台服务受限时走到这里，
+            // 兜底防止崩溃；正常从界面启动不受影响
+            Log.e(TAG, "startForeground 失败（系统限制后台启动）", e)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         isRunning = true
 
         // 相机已绑定时跳过：重复 unbindAll/rebind 会中断正在进行中的录像
@@ -607,18 +615,50 @@ class CameraService : LifecycleService() {
     }
 
     // 通过 Camera2 interop 请求相机按目标帧率出帧（AE 目标帧率范围）。
-    // 仅供参考，不保证精确达到；分辨率/帧率仍需重启监控才生效。
+    // 原实现请求精确区间 Range(fps, fps)，个别机型不支持该区间会导致绑定失败，
+    // 现改为从设备支持的 AE 帧率区间中选取最接近目标的；分辨率/帧率仍需重启监控才生效。
     private fun applyTargetFps(builder: ImageAnalysis.Builder, fps: Int) {
         if (fps <= 0) return
         try {
+            val range = pickSupportedAeFpsRange(fps)
+            Log.d(TAG, "请求 AE 目标帧率区间: $range (target=$fps)")
             Camera2Interop.Extender(builder)
                 .setCaptureRequestOption(
                     CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
-                    Range(fps, fps)
+                    range
                 )
         } catch (e: Exception) {
             Log.e(TAG, "设置相机目标帧率失败", e)
         }
+    }
+
+    // 从目标镜头支持的 AE 帧率区间中选取：优先精确匹配，其次包含 fps 的最小区间，
+    // 再次上界不超过 fps 的最大区间，兜底返回精确区间（交由系统收敛）
+    private fun pickSupportedAeFpsRange(fps: Int): Range<Int> {
+        try {
+            val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val targetFacing = if (useFrontCamera) {
+                CameraCharacteristics.LENS_FACING_FRONT
+            } else {
+                CameraCharacteristics.LENS_FACING_BACK
+            }
+            val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+                cameraManager.getCameraCharacteristics(id)
+                    .get(CameraCharacteristics.LENS_FACING) == targetFacing
+            } ?: return Range(fps, fps)
+            val ranges = cameraManager.getCameraCharacteristics(cameraId)
+                .get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+                ?: return Range(fps, fps)
+
+            ranges.firstOrNull { it.lower == fps && it.upper == fps }?.let { return it }
+            ranges.filter { fps >= it.lower && fps <= it.upper }
+                .minByOrNull { it.upper - it.lower }?.let { return it }
+            ranges.filter { it.upper <= fps }
+                .maxByOrNull { it.upper }?.let { return it }
+        } catch (e: Exception) {
+            Log.w(TAG, "读取支持的 AE 帧率区间失败，使用精确区间兜底", e)
+        }
+        return Range(fps, fps)
     }
 
     private fun isWithinTimeWindow(): Boolean {
@@ -887,6 +927,9 @@ class CameraService : LifecycleService() {
     }
 
     private fun getLocalIpAddress(): String {
+        // 优先返回 Wi-Fi 网卡（wlan*）的 IPv4：插着移动数据或 VPN 时，
+        // 遍历到的第一个 IPv4 可能是蜂窝/虚拟网卡地址，浏览器无法访问
+        var fallback: String? = null
         try {
             val interfaces = NetworkInterface.getNetworkInterfaces()
             while (interfaces.hasMoreElements()) {
@@ -896,14 +939,18 @@ class CameraService : LifecycleService() {
                 while (addresses.hasMoreElements()) {
                     val address = addresses.nextElement()
                     if (address is Inet4Address && !address.isLoopbackAddress) {
-                        return address.hostAddress ?: "0.0.0.0"
+                        val ip = address.hostAddress ?: continue
+                        if (networkInterface.name.startsWith("wlan")) {
+                            return ip
+                        }
+                        fallback = fallback ?: ip
                     }
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get IP", e)
         }
-        return "0.0.0.0"
+        return fallback ?: "0.0.0.0"
     }
 
     // 更新实际帧率（在编码线程中调用，体现真实推出去的帧）
