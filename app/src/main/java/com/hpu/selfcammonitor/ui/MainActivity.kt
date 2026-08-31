@@ -346,13 +346,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateStorageInfo() {
+        // 递归统计放到后台线程：长期运行后录像文件数千个，主线程 walk 会卡 UI
         val dir = File(getExternalFilesDir(null), "Recordings")
-        val totalSize = if (dir.exists()) {
-            dir.walkTopDown()
-                .filter { it.isFile && it.extension.equals("mp4", ignoreCase = true) }
-                .sumOf { it.length() }
-        } else 0L
-        tvStorage.text = "录像存储: ${FileSizeFormatter.format(totalSize)}"
+        Thread {
+            val totalSize = if (dir.exists()) {
+                dir.walkTopDown()
+                    .filter { it.isFile && it.extension.equals("mp4", ignoreCase = true) }
+                    .sumOf { it.length() }
+            } else 0L
+            runOnUiThread {
+                tvStorage.text = "录像存储: ${FileSizeFormatter.format(totalSize)}"
+            }
+        }.start()
     }
 
 }

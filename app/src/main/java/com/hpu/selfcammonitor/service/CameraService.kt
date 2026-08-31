@@ -11,16 +11,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
-import android.graphics.Rect
-import android.graphics.YuvImage
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.params.StreamConfigurationMap
-import android.media.MediaRecorder
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -28,14 +23,12 @@ import android.os.PowerManager
 import android.util.Log
 import android.util.Range
 import android.util.Size
-import android.view.Surface
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
 import androidx.camera.core.UseCase
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
@@ -54,7 +47,6 @@ import com.hpu.selfcammonitor.manager.AlertManager
 import com.hpu.selfcammonitor.utils.MJPEGStreamer
 import com.hpu.selfcammonitor.utils.MotionDetector
 import com.hpu.selfcammonitor.ui.MainActivity
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -79,7 +71,6 @@ class CameraService : LifecycleService() {
 
     // 配置项
     private var mjpegEnabled = true
-    private var motionDetectionEnabled = true
     private var useFrontCamera = false   // 镜头选择：false=后置，true=前置（启动相机时生效）
     private var actualCameraFacing = 0   // 实际绑定的镜头朝向：0=后置，1=前置（回退场景下与配置可能不同）
     private var actualResolution = "--"  // 实际绑定的推流分辨率（回退策略下可能与设置值不同）
@@ -97,10 +88,6 @@ class CameraService : LifecycleService() {
     private var lastIgnoredLogTime = 0L
 
     // 录制相关
-    private var mediaRecorder: MediaRecorder? = null
-    private var recordingSurface: Surface? = null
-    private var previewUseCase: Preview? = null  // 用于提供录制 Surface
-
     private var videoCapture: VideoCapture<Recorder>? = null
     private var recording: Recording? = null
 
@@ -207,7 +194,6 @@ class CameraService : LifecycleService() {
     private fun loadSettings() {
         val prefs = getSharedPreferences("camera_prefs", MODE_PRIVATE)
         mjpegEnabled = prefs.getBoolean("mjpeg_enabled", true)
-        motionDetectionEnabled = prefs.getBoolean("motion_detection_enabled", true)
 
         // HTTP 认证（空白视为未配置，认证关闭）
         streamServer.username = prefs.getString("http_user", null)?.takeIf { it.isNotBlank() }
@@ -267,6 +253,7 @@ class CameraService : LifecycleService() {
                 Log.d(TAG, "HTTP server started on port 8080")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start HTTP server", e)
+                sendStatusBroadcast(false)
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -280,6 +267,7 @@ class CameraService : LifecycleService() {
             // Android 14+ 从后台（如开机广播）启动 camera 类型前台服务受限时走到这里，
             // 兜底防止崩溃；正常从界面启动不受影响
             Log.e(TAG, "startForeground 失败（系统限制后台启动）", e)
+            sendStatusBroadcast(false)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -330,6 +318,7 @@ class CameraService : LifecycleService() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        sendStatusBroadcast(false)  // 通知主界面更新状态（原实现停止时无广播，界面一直显示"运行中"）
         stopContinuousRecording()
         stopMotionRecording()
         streamServer.stop()
@@ -570,6 +559,7 @@ class CameraService : LifecycleService() {
             } catch (e: Exception) {
                 Log.e(TAG, "相机绑定失败", e)
                 cameraBound = false
+                sendStatusBroadcast(false)  // 通知主界面更新状态（原实现停止时无广播，界面一直显示"运行中"）
                 stopSelf()
             }
         }, ContextCompat.getMainExecutor(this))
@@ -690,12 +680,6 @@ class CameraService : LifecycleService() {
         return hour * 60 + minute
     }
 
-    // 放在 CameraService 类内部
-    private fun imageToNv21(image: ImageProxy): ByteArray? {
-        // 复用安全转换逻辑（参考 MotionDetector 或 MJPEGStreamer 中的实现）
-        return MJPEGStreamer.Companion.yuv420888ToNv21(image) // 若已为 public
-    }
-
     private fun startClipRecording() {
         // 统一切到主线程执行：录像的启停、停止定时器、Finalize 回调均在主线程串行，
         // 消除相机分析线程与主线程之间的状态竞态（原实现 Start 事件异步置位，
@@ -764,27 +748,6 @@ class CameraService : LifecycleService() {
             clipStopRunnable = stopRunnable
             handler.postDelayed(stopRunnable, motionClipDurationMs)
         }
-    }
-
-    private fun stopClipRecording() {
-        if (!isRecording) return
-        try {
-            mediaRecorder?.stop()
-        } catch (_: Exception) {}
-        releaseMediaRecorder()
-        // 释放预览 Surface 提供
-        previewUseCase?.setSurfaceProvider(cameraExecutor) { request ->
-            request.willNotProvideSurface()
-        }
-        isRecording = false
-        Log.d(TAG, "运动录像完成")
-    }
-
-    private fun releaseMediaRecorder() {
-        try { mediaRecorder?.reset() } catch (_: Exception) {}
-        try { mediaRecorder?.release() } catch (_: Exception) {}
-        mediaRecorder = null
-        recordingSurface = null
     }
 
     /**
@@ -998,72 +961,15 @@ class CameraService : LifecycleService() {
         }
     }
 
-    private fun sendStatusBroadcast() {
+    private fun sendStatusBroadcast(running: Boolean = true) {
         val ip = getLocalIpAddress()
         val intent = Intent("com.hpu.selfcammonitor.SERVICE_STATUS")
         intent.setPackage(packageName)  // 显式广播：防系统过滤隐式广播
         intent.putExtra("ip", ip)
-        intent.putExtra("running", true)
+        intent.putExtra("running", running)
         intent.putExtra("mjpeg_enabled", mjpegEnabled)
-        intent.putExtra("motion_detection_enabled", motionDetectionEnabled)
         intent.putExtra("camera_facing", actualCameraFacing)  // 实际使用的镜头：0=后置，1=前置
         intent.putExtra("resolution", actualResolution)        // 实际推流分辨率，如 "640x480"
         sendBroadcast(intent)
-    }
-
-    // 将 ImageProxy 转换为指定尺寸的 NV21
-    private fun imageToNv21Scaled(image: ImageProxy, targetWidth: Int, targetHeight: Int): ByteArray? {
-        try {
-            // 先获得原始 NV21
-            val nv21 = imageToNv21(image) ?: return null
-            // 使用 YuvImage 解码为 Bitmap，再缩放，再转回 NV21（保留一次 JPEG 转换但保证兼容）
-            val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
-            val out = ByteArrayOutputStream()
-            if (!yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 100, out)) {
-                Log.e(TAG, "YuvImage 压缩失败")
-                return null
-            }
-            val jpegData = out.toByteArray()
-            val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
-            val originalBitmap = BitmapFactory.decodeByteArray(jpegData, 0, jpegData.size, opts)
-                ?: return null
-            val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, targetWidth, targetHeight, true)
-            originalBitmap.recycle()
-            val result = bitmapToNv21(scaledBitmap)
-            scaledBitmap.recycle()
-            return result
-        } catch (e: Exception) {
-            Log.e(TAG, "缩放转换异常", e)
-            return null
-        }
-    }
-
-    // Bitmap 转 NV21
-    private fun bitmapToNv21(bitmap: Bitmap): ByteArray {
-        val width = bitmap.width
-        val height = bitmap.height
-        val argb = IntArray(width * height)
-        bitmap.getPixels(argb, 0, width, 0, 0, width, height)
-        val yuv = ByteArray(width * height * 3 / 2)
-        var index = 0
-        var uvIndex = width * height
-        for (j in 0 until height) {
-            for (i in 0 until width) {
-                val pixel = argb[index]
-                val r = (pixel shr 16) and 0xFF
-                val g = (pixel shr 8) and 0xFF
-                val b = pixel and 0xFF
-                val y = ((66 * r + 129 * g + 25 * b + 128) shr 8) + 16
-                yuv[index] = y.coerceIn(0, 255).toByte()
-                if (j % 2 == 0 && index % 2 == 0) {
-                    val u = (((-38 * r - 74 * g + 112 * b + 128) shr 8) + 128).coerceIn(0, 255)
-                    val v = (((112 * r - 94 * g - 18 * b + 128) shr 8) + 128).coerceIn(0, 255)
-                    yuv[uvIndex++] = v.toByte()
-                    yuv[uvIndex++] = u.toByte()
-                }
-                index++
-            }
-        }
-        return yuv
     }
 }

@@ -167,6 +167,10 @@ class MJPEGStreamer {
     private val clients = ConcurrentHashMap<OutputStream, ClientInfo>()
     private val pushExecutor: ExecutorService = Executors.newCachedThreadPool()
 
+    // 已移除的客户端代数：客户端移除后其推送循环在下一轮检测时退出，
+    // 替代原 containsValue 线性扫描（O(n) 且每 5ms 一次）
+    private val removedClients = ConcurrentHashMap.newKeySet<ClientInfo>()
+
     // 最新一帧 JPEG（供 /snapshot 端点使用）
     private val latestJpeg = AtomicReference<ByteArray?>(null)
 
@@ -176,6 +180,7 @@ class MJPEGStreamer {
 
     fun addClient(outputStream: OutputStream) {
         val info = ClientInfo(outputStream)
+        removedClients.remove(info)
         clients[outputStream] = info
         // 为每个客户端启动一个推送线程
         pushExecutor.submit { clientPushLoop(info) }
@@ -183,7 +188,7 @@ class MJPEGStreamer {
     }
 
     fun removeClient(outputStream: OutputStream) {
-        clients.remove(outputStream)
+        clients.remove(outputStream)?.let { removedClients.add(it) }
         Log.d(TAG, "Client disconnected, total: ${clients.size}")
         try { outputStream.close() } catch (_: Exception) {}
     }
@@ -206,7 +211,7 @@ class MJPEGStreamer {
      */
     private fun clientPushLoop(info: ClientInfo) {
         try {
-            while (clients.containsValue(info)) {
+            while (!removedClients.contains(info)) {
                 val frameBytes = info.pendingFrame.getAndSet(null)
                 if (frameBytes != null) {
                     try {
@@ -224,6 +229,7 @@ class MJPEGStreamer {
             }
         } catch (_: InterruptedException) {
         } finally {
+            removedClients.remove(info)  // 线程退出时清理，防止集合缓慢膨胀
             try { info.outputStream.close() } catch (_: Exception) {}
         }
     }

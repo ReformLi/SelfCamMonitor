@@ -42,7 +42,6 @@ class AlertManager {
             Log.d(TAG, "在静默期，跳过")
             return
         }
-        lastAlertTime = now
 
         val json = JSONObject().apply {
             put("event", "motion_detected")
@@ -57,10 +56,15 @@ class AlertManager {
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
+                // 发送失败不占用静默期：网络/服务端故障恢复后，下一次运动事件可立即报警。
+                // 静默期仅在成功送达时启动
                 Log.w(TAG, "报警请求失败: ${e.message}")
             }
             override fun onResponse(call: Call, response: Response) {
                 Log.d(TAG, "报警已发送，状态码: ${response.code}")
+                if (response.code in 200..299) {
+                    lastAlertTime = now
+                }
                 response.close()
             }
         })
