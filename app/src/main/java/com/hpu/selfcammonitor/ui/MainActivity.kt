@@ -10,7 +10,11 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
+import android.os.StatFs
 import android.provider.Settings
+import android.text.Spannable
+import android.text.SpannableString
+import android.text.style.ForegroundColorSpan
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.TextView
@@ -92,6 +96,20 @@ class MainActivity : AppCompatActivity() {
             if (intent.action == "com.hpu.selfcammonitor.FPS_UPDATE") {
                 val fps = intent.getIntExtra("fps", 0)
                 tvFps.text = "帧率: $fps fps"
+            }
+        }
+    }
+
+    // 录像失败（如磁盘写满）标记：置红"录像存储"显示；可用空间恢复后自动解除
+    private var storageFull = false
+    private val storageFullThresholdBytes = 64L * 1024 * 1024
+
+    // 接收录像失败广播（磁盘满等），将存储显示标红
+    private val recordErrorReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == "com.hpu.selfcammonitor.RECORD_ERROR") {
+                storageFull = true
+                updateStorageInfo()
             }
         }
     }
@@ -209,6 +227,14 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
 
+        // 注册录像失败广播（磁盘满等，用于存储显示标红）
+        ContextCompat.registerReceiver(
+            this,
+            recordErrorReceiver,
+            IntentFilter("com.hpu.selfcammonitor.RECORD_ERROR"),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+
         // 初始UI状态
         updateUI(isServiceRunning())
         updateStorageInfo()
@@ -241,6 +267,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         unregisterReceiver(statusReceiver)
         unregisterReceiver(fpsReceiver)
+        unregisterReceiver(recordErrorReceiver)
     }
 
     // ---------- 权限相关 ----------
@@ -354,8 +381,26 @@ class MainActivity : AppCompatActivity() {
                     .filter { it.isFile && it.extension.equals("mp4", ignoreCase = true) }
                     .sumOf { it.length() }
             } else 0L
+            // 自愈检查：可用空间恢复到阈值以上时解除"已满"标记（用户删除录像/清理空间后）
+            val freeBytes = getExternalFilesDir(null)?.let {
+                try { StatFs(it.absolutePath).availableBytes } catch (_: Exception) { Long.MAX_VALUE }
+            } ?: Long.MAX_VALUE
+            if (freeBytes > storageFullThresholdBytes) storageFull = false
             runOnUiThread {
-                tvStorage.text = "录像存储: ${FileSizeFormatter.format(totalSize)}"
+                if (storageFull) {
+                    // 数字+计量单位+（已满）红色，"录像存储: "标签保持原色
+                    val sizeStr = FileSizeFormatter.format(totalSize)
+                    val text = "录像存储: $sizeStr（已满）"
+                    val span = SpannableString(text)
+                    span.setSpan(
+                        ForegroundColorSpan(getColor(android.R.color.holo_red_dark)),
+                        "录像存储: ".length, text.length,
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                    tvStorage.text = span
+                } else {
+                    tvStorage.text = "录像存储: ${FileSizeFormatter.format(totalSize)}"
+                }
             }
         }.start()
     }

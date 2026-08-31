@@ -419,6 +419,16 @@ class CameraService : LifecycleService() {
     private fun showRecordError(text: String) {
         getSystemService(NotificationManager::class.java)
             .notify(NOTIFICATION_ID, buildNotification(getLocalIpAddress(), text))
+        notifyRecordError()
+    }
+
+    /**
+     * 录像失败（如磁盘写满）时通知主界面，将"录像存储"标红显示
+     */
+    private fun notifyRecordError() {
+        val intent = Intent("com.hpu.selfcammonitor.RECORD_ERROR")
+        intent.setPackage(packageName)  // 显式广播：防系统过滤隐式广播
+        sendBroadcast(intent)
     }
 
     private fun acquireWakeLock() {
@@ -774,6 +784,7 @@ class CameraService : LifecycleService() {
                                         try { file.delete() } catch (_: Exception) {}
                                     }
                                     Log.e(TAG, "运动录像失败: ${file.name}, error=${recordEvent.error}")
+                                    notifyRecordError()  // 通知主界面"录像存储"标红
                                 } else {
                                     Log.d(TAG, "运动录像完成: ${file.name}")
                                 }
