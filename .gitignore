@@ -48,6 +48,9 @@ captures/
 # 构建元数据
 output-metadata.json
 
+# 验证文件
+.gradle-home/
+
 # ==================== 4. Kotlin 特定文件 ====================
 .kotlin/
 
