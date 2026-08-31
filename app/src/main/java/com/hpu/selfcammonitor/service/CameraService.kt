@@ -103,7 +103,16 @@ class CameraService : LifecycleService() {
 
     private var videoCapture: VideoCapture<Recorder>? = null
     private var recording: Recording? = null
+
+    // 运动录像进行中标志：启停均在主线程串行执行，volatile 保证跨线程可见
+    @Volatile
     private var isRecording = false
+
+    // 运动录像停止定时器句柄（可取消，防止误停后续新录像）
+    private var clipStopRunnable: Runnable? = null
+
+    // 运动录像代数计数：使迟到的旧会话 Finalize 事件/定时器不影响新会话状态
+    private var clipGeneration = 0
 
     // 帧率限制（均匀间隔出帧）
     private var targetFps = 10
@@ -148,6 +157,13 @@ class CameraService : LifecycleService() {
     private var currentSegmentRecording: Recording? = null
     private val continuousSegmentHandler = Handler(Looper.getMainLooper())
     private var segmentRotateRunnable: Runnable? = null
+
+    // 配置热重载广播是否已注册（防止重复 onStartCommand 导致重复注册）
+    private var configReceiverRegistered = false
+
+    // 相机是否已绑定（防止重复 onStartCommand 重新绑定，导致进行中的录像被中断）
+    @Volatile
+    private var cameraBound = false
 
     companion object {
         const val CHANNEL_ID = "camera_service_channel"
@@ -232,22 +248,28 @@ class CameraService : LifecycleService() {
         loadSettings()
         super.onStartCommand(intent, flags, startId)
 
-        // 在 onStartCommand 中或 onCreate 中
-        // 注册配置热重载广播（RECEIVER_NOT_EXPORTED：仅接收本应用内广播，满足 Android 13+ 要求）
-        ContextCompat.registerReceiver(
-            this,
-            configReceiver,
-            IntentFilter("com.hpu.selfcammonitor.RELOAD_CONFIG"),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
+        // 注册配置热重载广播（RECEIVER_NOT_EXPORTED：仅接收本应用内广播，满足 Android 13+ 要求）。
+        // 仅注册一次：onStartCommand 可能被重复触发（如服务已运行时再次 start）
+        if (!configReceiverRegistered) {
+            ContextCompat.registerReceiver(
+                this,
+                configReceiver,
+                IntentFilter("com.hpu.selfcammonitor.RELOAD_CONFIG"),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+            configReceiverRegistered = true
+        }
 
-        try {
-            streamServer.start()
-            Log.d(TAG, "HTTP server started on port 8080")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start HTTP server", e)
-            stopSelf()
-            return START_NOT_STICKY
+        // HTTP 服务器已在运行时跳过：重复 start 会因端口被占用抛异常，进而触发 stopSelf 导致服务自杀
+        if (!streamServer.isAlive) {
+            try {
+                streamServer.start()
+                Log.d(TAG, "HTTP server started on port 8080")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start HTTP server", e)
+                stopSelf()
+                return START_NOT_STICKY
+            }
         }
 
         val ipAddress = getLocalIpAddress()
@@ -255,7 +277,10 @@ class CameraService : LifecycleService() {
         startForeground(NOTIFICATION_ID, notification)
         isRunning = true
 
-        startCamera()
+        // 相机已绑定时跳过：重复 unbindAll/rebind 会中断正在进行中的录像
+        if (!cameraBound) {
+            startCamera()
+        }
 
         sendStatusBroadcast()
         return START_STICKY
@@ -268,32 +293,21 @@ class CameraService : LifecycleService() {
             loadSettings() // 重新加载所有配置
             val isPreviewOnly = (recordMode == MODE_PREVIEW_ONLY)
 
-            // 如果在"仅预览"和"录像模式"之间切换，需要重新绑定相机用例
-            if (wasPreviewOnly != isPreviewOnly) {
-                Log.d(TAG, "模式跨越了仅预览边界，重新绑定相机用例: old=$oldMode, new=$recordMode")
-                startCamera()
-                return
-            }
+            if (oldMode != recordMode) {
+                // 模式切换：先无条件停掉所有录像会话（不依赖旧模式判断），
+                // 再按新模式初始化。旧实现先 loadSettings 再按模式判断，
+                // 会导致旧运动录像停不掉、连续录像标志残留
+                stopMotionRecording()
+                stopContinuousRecording()
 
-            when (recordMode) {
-                MODE_CONTINUOUS -> {
-                    if (oldMode != MODE_CONTINUOUS) {
-                        // 从其他模式切换到连续录像
-                        stopMotionRecordingIfNeeded()   // 停止可能正在进行的运动录像
-                        stopContinuousRecording()       // 停止旧连续录像（若有）
-                        startContinuousRecording()      // 启动新连续录像
-                    }
+                if (wasPreviewOnly != isPreviewOnly) {
+                    // 跨越仅预览边界，需要重新绑定相机用例
+                    Log.d(TAG, "模式跨越了仅预览边界，重新绑定相机用例: old=$oldMode, new=$recordMode")
+                    startCamera()   // 绑定成功后会按新模式自动启动连续录像
+                    return
                 }
-                MODE_MOTION_TRIGGERED -> {
-                    if (oldMode == MODE_CONTINUOUS) {
-                        stopContinuousRecording()       // 停止连续录像
-                    }
-                    // 运动触发模式不需要立即录像，等待运动事件
-                }
-                MODE_PREVIEW_ONLY -> {
-                    // 停止所有录像
-                    stopContinuousRecording()
-                    stopMotionRecordingIfNeeded()
+                if (recordMode == MODE_CONTINUOUS) {
+                    startContinuousRecording()
                 }
             }
             Log.d(TAG, "配置已更新: mode=$recordMode, motionClip=${motionClipDurationMs}ms, continuousSegment=${continuousSegmentDurationMs}ms")
@@ -309,12 +323,12 @@ class CameraService : LifecycleService() {
         super.onDestroy()
         isRunning = false
         stopContinuousRecording()
-        stopMotionRecordingIfNeeded()
+        stopMotionRecording()
         streamServer.stop()
         cameraProvider?.unbindAll()
+        cameraBound = false
         cameraExecutor.shutdown()
         encodeExecutor.shutdown()
-        stopClipRecording()
         if (wakeLock.isHeld) wakeLock.release()
         try {
             unregisterReceiver(configReceiver)
@@ -335,7 +349,7 @@ class CameraService : LifecycleService() {
         manager.createNotificationChannel(channel)
     }
 
-    private fun buildNotification(ip: String): Notification {
+    private fun buildNotification(ip: String, text: String = "访问: http://$ip:8080/video"): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent,
@@ -343,11 +357,19 @@ class CameraService : LifecycleService() {
         )
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("监控运行中")
-            .setContentText("访问: http://$ip:8080/video")
+            .setContentText(text)
             .setSmallIcon(R.drawable.ic_menu_camera)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
+    }
+
+    /**
+     * 录像异常提示：更新前台服务通知内容，避免磁盘写满等错误静默失败
+     */
+    private fun showRecordError(text: String) {
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION_ID, buildNotification(getLocalIpAddress(), text))
     }
 
     private fun acquireWakeLock() {
@@ -391,30 +413,35 @@ class CameraService : LifecycleService() {
                 try {
                     // 检查是否在允许的监控时间段内
                     if (!isWithinTimeWindow()) {
+                        // 非监控时段：不分析、不推流；同时暂停连续录像
+                        // （保留 continuousRecording 标志，时段恢复后自动续录）
+                        if (continuousRecording && currentSegmentRecording != null) {
+                            handler.post { pauseContinuousRecording() }
+                        }
                         imageProxy.close()
                         return@Analyzer  // 不在时间窗内，直接丢弃帧
                     }
 // 只读诊断：统计分析线程实际收到的帧（时间窗内）
                     diagRawCount++
 
-                    // 应用帧率限制（均匀间隔到达：到固定时间间隔才处理，其余帧毫秒级丢弃）
+                    // 应用帧率限制（均匀间隔到达：到固定时间间隔才处理，其余帧毫秒级丢弃）。
+                    // 无论是否推流都限速：关闭推流时若不限速，运动检测会跑满传感器帧率，
+                    // 既浪费 CPU，也会使相邻帧差异变小、改变灵敏度语义
                     val now = System.currentTimeMillis()
                     if (nextEmitAt == 0L) nextEmitAt = now
-                    if (mjpegEnabled && now < nextEmitAt) {
+                    if (now < nextEmitAt) {
                         imageProxy.close()
                         return@Analyzer
                     }
-                    if (mjpegEnabled) {
-                        // 防止掉帧后疯狂追赶造成突发，同时保持固定节奏
-                        nextEmitAt = maxOf(nextEmitAt + (1000L / targetFps), now)
-                    }
+                    // 防止掉帧后疯狂追赶造成突发，同时保持固定节奏
+                    nextEmitAt = maxOf(nextEmitAt + (1000L / targetFps), now)
                     val frameStartTs = now  // 用于统计整帧处理耗时
 
                     // 根据录像模式处理
                     when (recordMode) {
                         MODE_CONTINUOUS -> {
-                            // 连续录像：确保录像正在运行（服务启动时开始，模式切换时处理）
-                            // 这里不需要额外动作，只需保持推流（如果需要）
+                            // 连续录像：录像会话因监控时间窗暂停或异常中断时自动恢复
+                            maybeResumeContinuousRecording()
                         }
                         MODE_MOTION_TRIGGERED -> {
                             // 运动检测
@@ -525,6 +552,7 @@ class CameraService : LifecycleService() {
                         Log.w(TAG, "读取实际推流分辨率失败", e)
                     }
                 }
+                cameraBound = true
                 Log.d(TAG, "相机绑定成功")
 
                 // 绑定成功后根据模式启动连续录像
@@ -533,6 +561,7 @@ class CameraService : LifecycleService() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "相机绑定失败", e)
+                cameraBound = false
                 stopSelf()
             }
         }, ContextCompat.getMainExecutor(this))
@@ -628,46 +657,73 @@ class CameraService : LifecycleService() {
     }
 
     private fun startClipRecording() {
-        if (isRecording) return
-        val vc = videoCapture ?: run {
-            Log.w(TAG, "startClipRecording: videoCapture 为 null，无法开始录像")
-            return
+        // 统一切到主线程执行：录像的启停、停止定时器、Finalize 回调均在主线程串行，
+        // 消除相机分析线程与主线程之间的状态竞态（原实现 Start 事件异步置位，
+        // 运动连续触发时可能在事件到达前重复创建录制会话）
+        handler.post {
+            if (isRecording) return@post
+            if (!isRunning) return@post
+            val vc = videoCapture
+            if (vc == null) {
+                Log.w(TAG, "startClipRecording: videoCapture 为 null，无法开始录像")
+                return@post
+            }
+            val dailyDir = getDailyRecordDir()
+            val fileName = "motion_${System.currentTimeMillis()}.mp4"
+            val file = File(dailyDir, fileName)
+            val outputOptions = FileOutputOptions.Builder(file).build()
+            // 代数计数：本段录像的"身份证"，迟到的旧会话事件凭此失效
+            val gen = ++clipGeneration
+
+            val pending = vc.output
+                .prepareRecording(this, outputOptions)
+                .apply {
+                    // 如果已授予录音权限，则启用音频
+                    if (ActivityCompat.checkSelfPermission(
+                            this@CameraService,
+                            Manifest.permission.RECORD_AUDIO
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        withAudioEnabled()
+                    }
+                }
+                .start(ContextCompat.getMainExecutor(this)) { recordEvent ->
+                    when (recordEvent) {
+                        is VideoRecordEvent.Start -> {
+                            Log.d(TAG, "运动录像开始（含音频）: ${file.name}")
+                        }
+                        is VideoRecordEvent.Finalize -> {
+                            // 仅处理当前代的事件，防止迟到的旧会话 Finalize 误清新会话状态
+                            if (gen == clipGeneration) {
+                                isRecording = false
+                                if (recordEvent.error != 0) {
+                                    // 录制失败（如磁盘已满）：删除损坏的空文件，避免出现在录像列表
+                                    if (!file.exists() || file.length() < 4096) {
+                                        try { file.delete() } catch (_: Exception) {}
+                                    }
+                                    Log.e(TAG, "运动录像失败: ${file.name}, error=${recordEvent.error}")
+                                } else {
+                                    Log.d(TAG, "运动录像完成: ${file.name}")
+                                }
+                            }
+                        }
+                    }
+                }
+            recording = pending
+            // 同步置位，闭紧「检查-置位」窗口，防止运动连续触发时重复创建录制会话
+            isRecording = true
+
+            // 取消旧的停止定时器（若前一段录像被提前停止），避免误停本次录像
+            clipStopRunnable?.let { handler.removeCallbacks(it) }
+            val stopRunnable = Runnable {
+                if (gen == clipGeneration) {
+                    recording?.stop()
+                    recording = null
+                }
+            }
+            clipStopRunnable = stopRunnable
+            handler.postDelayed(stopRunnable, motionClipDurationMs)
         }
-        val dailyDir = getDailyRecordDir()
-        val fileName = "motion_${System.currentTimeMillis()}.mp4"
-        val file = File(dailyDir, fileName)
-        val outputOptions = FileOutputOptions.Builder(file).build()
-
-        val pending = vc.output
-            .prepareRecording(this, outputOptions)
-            .apply {
-                // 如果已授予录音权限，则启用音频
-                if (ActivityCompat.checkSelfPermission(
-                        this@CameraService,
-                        Manifest.permission.RECORD_AUDIO
-                    ) == PackageManager.PERMISSION_GRANTED
-                ) {
-                    withAudioEnabled()
-                }
-            }
-            .start(ContextCompat.getMainExecutor(this)) { recordEvent ->
-                when (recordEvent) {
-                    is VideoRecordEvent.Start -> {
-                        isRecording = true
-                        Log.d(TAG, "运动录像开始（含音频）: ${file.name}")
-                    }
-                    is VideoRecordEvent.Finalize -> {
-                        isRecording = false
-                        Log.d(TAG, "运动录像完成: ${file.name}")
-                    }
-                }
-            }
-        recording = pending
-
-        handler.postDelayed({
-            recording?.stop()
-            recording = null
-        }, motionClipDurationMs)
     }
 
     private fun stopClipRecording() {
@@ -716,7 +772,14 @@ class CameraService : LifecycleService() {
      */
     private fun startNewContinuousSegment() {
         if (!continuousRecording) return
-        val vc = videoCapture ?: run {
+        if (currentSegmentRecording != null) return  // 已有分段在录，避免重复创建
+        if (!isWithinTimeWindow()) {
+            // 非监控时段不开新分段（continuousRecording 标志保留，时段恢复后自动续录）
+            Log.d(TAG, "非监控时段，暂不开启连续录像分段")
+            return
+        }
+        val vc = videoCapture
+        if (vc == null) {
             Log.w(TAG, "startNewContinuousSegment: videoCapture 为 null，无法开始录像")
             return
         }
@@ -740,16 +803,33 @@ class CameraService : LifecycleService() {
                         Log.d(TAG, "连续录像分段开始: ${file.name}")
                     }
                     is VideoRecordEvent.Finalize -> {
-                        Log.d(TAG, "连续录像分段完成: ${file.name}, 原因: ${event.error}")
-                        // 分段结束后，如果仍处于连续录像模式，启动下一段
-                        if (recordMode == MODE_CONTINUOUS && continuousRecording) {
-                            startNewContinuousSegment()
+                        if (event.error != 0) {
+                            // 写入失败（如磁盘已满）：删除损坏文件并停止录像循环，
+                            // 避免无限失败重试占用 CPU（原实现无论成败都开下一段）
+                            if (!file.exists() || file.length() < 4096) {
+                                try { file.delete() } catch (_: Exception) {}
+                            }
+                            Log.e(TAG, "连续录像分段失败: ${file.name}, error=${event.error}")
+                            continuousRecording = false
+                            currentSegmentRecording = null
+                            segmentRotateRunnable?.let { continuousSegmentHandler.removeCallbacks(it) }
+                            segmentRotateRunnable = null
+                            showRecordError("录像出错已停止（错误码 ${event.error}），请检查存储空间")
+                        } else {
+                            Log.d(TAG, "连续录像分段完成: ${file.name}")
+                            // 分段结束后，若仍处于连续录像模式且在监控时段内，启动下一段
+                            // （非监控时段由分析线程在时段恢复后自动续录）
+                            if (recordMode == MODE_CONTINUOUS && continuousRecording && isWithinTimeWindow()) {
+                                startNewContinuousSegment()
+                            }
                         }
                     }
                 }
             }
         currentSegmentRecording = pending
 
+        // 清理旧分段定时器后重新计时，避免旧定时器误停新分段
+        segmentRotateRunnable?.let { continuousSegmentHandler.removeCallbacks(it) }
         // 设置定时器，到达分段时长后停止当前分段（Finalize 事件中会自动开启下一段）
         segmentRotateRunnable = Runnable {
             if (recordMode == MODE_CONTINUOUS && continuousRecording) {
@@ -761,24 +841,49 @@ class CameraService : LifecycleService() {
     }
 
     /**
-     * 停止连续录像（取消定时器，停止当前分段）
+     * 停止连续录像（清除标志、取消定时器、停止当前分段）
      */
     private fun stopContinuousRecording() {
         continuousRecording = false
+        pauseContinuousRecording()
+    }
+
+    /**
+     * 暂停连续录像：停止当前分段但保留 continuousRecording 标志，
+     * 监控时间窗恢复后由分析线程自动续录（用于非监控时段）
+     */
+    private fun pauseContinuousRecording() {
         segmentRotateRunnable?.let { continuousSegmentHandler.removeCallbacks(it) }
+        segmentRotateRunnable = null
         currentSegmentRecording?.stop()
         currentSegmentRecording = null
     }
 
     /**
-     * 停止运动触发录像（如果正在录制）
+     * 恢复连续录像（在相机分析线程调用）：
+     * 监控时间窗恢复或分段意外缺失时，投递到主线程重新开启分段
      */
-    private fun stopMotionRecordingIfNeeded() {
-        if (recordMode == MODE_MOTION_TRIGGERED && isRecording) {
-            recording?.stop()
-            recording = null
-            isRecording = false
+    private fun maybeResumeContinuousRecording() {
+        if (!continuousRecording || currentSegmentRecording != null) return
+        handler.post {
+            if (recordMode == MODE_CONTINUOUS && continuousRecording && currentSegmentRecording == null) {
+                startNewContinuousSegment()
+            }
         }
+    }
+
+    /**
+     * 无条件停止运动触发录像（不依赖当前 recordMode 判断）。
+     * 模式切换时 loadSettings() 已把 recordMode 更新为新值，
+     * 若按模式判断会漏停正在进行的录像（原 stopMotionRecordingIfNeeded 的缺陷）
+     */
+    private fun stopMotionRecording() {
+        clipGeneration++  // 使迟到的 Finalize 事件与停止定时器失效
+        clipStopRunnable?.let { handler.removeCallbacks(it) }
+        clipStopRunnable = null
+        recording?.stop()
+        recording = null
+        isRecording = false
     }
 
     private fun getLocalIpAddress(): String {
