@@ -161,7 +161,8 @@ class MJPEGStreamer {
     // 每个客户端独立的输出流 + 线程
     private data class ClientInfo(
         val outputStream: OutputStream,
-        val pendingFrame: AtomicReference<ByteArray?> = AtomicReference(null)
+        val pendingFrame: AtomicReference<ByteArray?> = AtomicReference(null),
+        val frameLock: java.lang.Object = java.lang.Object()  // 需 wait/notifyAll，Any 不暴露这些方法
     )
 
     private val clients = ConcurrentHashMap<OutputStream, ClientInfo>()
@@ -208,11 +209,22 @@ class MJPEGStreamer {
     /**
      * 每个客户端独立的推送循环。
      * 使用 AtomicReference 存最新帧：新帧来了直接覆盖旧帧，丢弃慢帧。
+     * 无新帧时在 frameLock 上等待（200ms 超时兜底），由 pushFrame 唤醒，
+     * 替代原先每 5ms 的轮询（每客户端每秒 200 次空唤醒）。
      */
     private fun clientPushLoop(info: ClientInfo) {
         try {
             while (!removedClients.contains(info)) {
-                val frameBytes = info.pendingFrame.getAndSet(null)
+                var frameBytes = info.pendingFrame.getAndSet(null)
+                if (frameBytes == null) {
+                    synchronized(info.frameLock) {
+                        // double-check：防 notify 发生在 getAndSet 与 wait 之间
+                        if (info.pendingFrame.get() == null) {
+                            info.frameLock.wait(200)
+                        }
+                        frameBytes = info.pendingFrame.getAndSet(null)
+                    }
+                }
                 if (frameBytes != null) {
                     try {
                         info.outputStream.write(frameBytes)
@@ -222,9 +234,6 @@ class MJPEGStreamer {
                         removeClient(info.outputStream)
                         return
                     }
-                } else {
-                    // 没有新帧，短暂等待
-                    Thread.sleep(5)
                 }
             }
         } catch (_: InterruptedException) {
@@ -258,9 +267,10 @@ class MJPEGStreamer {
         System.arraycopy(headerBytes, 0, frameBytes, 0, headerBytes.size)
         System.arraycopy(jpegData, 0, frameBytes, headerBytes.size, jpegData.size)
 
-        // 只更新引用，不阻塞写
+        // 只更新引用，不阻塞写；随后唤醒各客户端推送线程
         clients.values.forEach { info ->
             info.pendingFrame.set(frameBytes)
+            synchronized(info.frameLock) { info.frameLock.notifyAll() }
         }
     }
 

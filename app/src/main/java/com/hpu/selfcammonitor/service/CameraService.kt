@@ -56,6 +56,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 
 class CameraService : LifecycleService() {
 
@@ -174,10 +175,27 @@ class CameraService : LifecycleService() {
         const val DEFAULT_CONTINUOUS_SEGMENT_SEC = 600 // 10分钟
     }
 
+    // 待编码帧槽位：分析线程只做覆盖式投递（旧帧被新帧直接替换）。
+    // 积压时旧帧在"编码前"就被丢弃——不浪费 CPU，也不让观看延迟无限增长
+    private val pendingEncode = AtomicReference<EncodeTask?>(null)
+    private val encodeLock = java.lang.Object()  // 需 wait/notifyAll，Any 不暴露这些方法
+    @Volatile
+    private var encodeLoopRunning = false
+
+    // 一帧待编码数据（NV21 已脱离 ImageProxy 生命周期）
+    private data class EncodeTask(
+        val nv21: ByteArray,
+        val width: Int,
+        val height: Int,
+        val rotation: Int
+    )
+
     override fun onCreate() {
         super.onCreate()
         cameraExecutor = Executors.newSingleThreadExecutor()
-        encodeExecutor = Executors.newFixedThreadPool(2)
+        // 单线程编码循环：多线程并发编码无法保证完成顺序，会导致客户端帧乱序（画面回跳）；
+        // 配合 pendingEncode 槽位，单线程 + 覆盖式投递天然保序且自带丢帧
+        encodeExecutor = Executors.newSingleThreadExecutor()
         mjpegStreamer = MJPEGStreamer()
         streamServer = StreamServer(8080)
         streamServer.setMJPEGStreamer(mjpegStreamer)
@@ -189,6 +207,37 @@ class CameraService : LifecycleService() {
         if (!recordDir.exists()) recordDir.mkdirs()
 
         loadSettings()
+        startEncodeLoop()
+    }
+
+    // 编码循环：持续取最新帧做旋转+JPEG 编码并推送。
+    // 无帧时通过 wait 挂起（5ms 轮询改为事件唤醒），500ms 超时兜底防 notify 丢失
+    private fun startEncodeLoop() {
+        if (encodeLoopRunning) return
+        encodeLoopRunning = true
+        encodeExecutor.execute {
+            while (encodeLoopRunning) {
+                val task = pendingEncode.getAndSet(null)
+                if (task == null) {
+                    synchronized(encodeLock) {
+                        // double-check：防 notify 发生在 getAndSet 与 wait 之间
+                        if (pendingEncode.get() == null) encodeLock.wait(500)
+                    }
+                    continue
+                }
+                try {
+                    val jpeg = mjpegStreamer.nv21ToJpeg(
+                        task.nv21, task.width, task.height, task.rotation, 60
+                    )
+                    if (jpeg != null) {
+                        mjpegStreamer.pushFrame(jpeg)
+                        updateFps()
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "编码失败", e)
+                }
+            }
+        }
     }
 
     private fun loadSettings() {
@@ -325,6 +374,9 @@ class CameraService : LifecycleService() {
         cameraProvider?.unbindAll()
         cameraBound = false
         cameraExecutor.shutdown()
+        // 先置停再唤醒编码循环，避免 wait 中挂 500ms 超时
+        encodeLoopRunning = false
+        synchronized(encodeLock) { encodeLock.notifyAll() }
         encodeExecutor.shutdown()
         if (wakeLock.isHeld) wakeLock.release()
         try {
@@ -453,8 +505,9 @@ class CameraService : LifecycleService() {
                             // 不录像、不运动检测
                         }
                     }
-                    // MJPEG 推流：只在分析线程做廉价的 NV21 拷贝，旋转 + JPEG 编码交给独立线程池，
-                    // 让分析线程快速返回，CameraX 不用等编码完成，从而让实际出帧更贴近目标帧率。
+                    // MJPEG 推流：只在分析线程做 NV21 拷贝，随后覆盖式投递到编码槽位。
+                    // 编码（旋转+JPEG）由单线程编码循环异步完成：分析线程快速返回，
+                    // CameraX 不用等编码；编码积压时旧帧在编码前就被丢弃，不产生延迟累积
                     if (mjpegEnabled) {
                         val copyStart = System.nanoTime()
                         val nv21 = MJPEGStreamer.yuv420888ToNv21(imageProxy)
@@ -468,16 +521,11 @@ class CameraService : LifecycleService() {
                             if (copyCostMs > diagCopyMaxMs) diagCopyMaxMs = copyCostMs
                         }
                         if (nv21 != null) {
-                            val frameWidth = imageProxy.width
-                            val frameHeight = imageProxy.height
                             val rotation = imageProxy.imageInfo.rotationDegrees
-                            encodeExecutor.execute {
-                                val jpeg = mjpegStreamer.nv21ToJpeg(nv21, frameWidth, frameHeight, rotation, 60)
-                                if (jpeg != null) {
-                                    mjpegStreamer.pushFrame(jpeg)
-                                    updateFps()
-                                }
-                            }
+                            pendingEncode.set(
+                                EncodeTask(nv21, imageProxy.width, imageProxy.height, rotation)
+                            )
+                            synchronized(encodeLock) { encodeLock.notifyAll() }
                         }
                     }
 

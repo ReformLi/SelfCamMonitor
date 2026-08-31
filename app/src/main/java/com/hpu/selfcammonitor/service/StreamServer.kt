@@ -126,6 +126,7 @@ body{display:flex;flex-direction:column}
 #container{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;min-height:0;touch-action:none}
 #wrapper{position:relative;transform-origin:center center;transition:none;display:flex;align-items:center;justify-content:center;will-change:transform}
 #img{display:block;max-width:100%;max-height:100%;object-fit:contain;-webkit-user-drag:none;user-select:none}
+#cv{display:none;max-width:100%;max-height:100%;-webkit-user-drag:none;user-select:none}
 #overlay{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:#666;font-size:16px;display:none}
 #overlay.show{display:block}
 #bottombar{padding:6px 12px;background:#2a2a2a;font-size:12px;color:#888;flex-shrink:0;display:flex;justify-content:space-between}
@@ -147,7 +148,7 @@ body{display:flex;flex-direction:column}
 <button id="btn-f" class="btn">全屏</button>
 </div>
 <div id="container">
-<div id="wrapper"><img id="img" alt="监控画面"></div>
+<div id="wrapper"><canvas id="cv"></canvas><img id="img" decoding="async" alt="监控画面"></div>
 <div id="overlay"></div>
 </div>
 <div id="bottombar">
@@ -160,6 +161,8 @@ body{display:flex;flex-direction:column}
 </div>
 <script>
 var img=document.getElementById('img'),wrapper=document.getElementById('wrapper'),
+cv=document.getElementById('cv'),ctx=(function(){try{return cv.getContext('2d')}catch(e){return null}})(),
+dispEl=img,useBmp=false,
 dot=document.getElementById('dot'),st=document.getElementById('st'),
 fps=document.getElementById('fps'),ov=document.getElementById('overlay'),
 ic=document.getElementById('ic'),it=document.getElementById('it'),
@@ -174,14 +177,38 @@ function setStatus(s){
   if(s==='disconnected'||s==='off'){ov.textContent=t[s];ov.classList.add('show');}
   else ov.classList.remove('show');
 }
+// 优先走 createImageBitmap+canvas：JPEG 解码移出主线程，低端查看设备掉帧更少；
+// 不支持时回退 img.src（decoding=async 避免解码阻塞渲染一帧）
+if(window.createImageBitmap&&ctx){
+  useBmp=true;dispEl=cv;
+  cv.style.display='block';img.style.display='none';
+}
+var dfChain=Promise.resolve();
+function drawFrame(d){
+  var blob=new Blob([d],{type:'image/jpeg'});
+  if(useBmp){
+    return createImageBitmap(blob).then(function(bmp){
+      if(cv.width!==bmp.width||cv.height!==bmp.height){cv.width=bmp.width;cv.height=bmp.height;}
+      ctx.drawImage(bmp,0,0);bmp.close();
+    });
+  }
+  return new Promise(function(res){
+    if(bu)URL.revokeObjectURL(bu);
+    bu=URL.createObjectURL(blob);
+    img.onload=img.onerror=function(){img.onload=img.onerror=null;res();};
+    img.src=bu;
+  });
+}
 function displayFrame(d){
   if(d.length<100)return;
-  if(bu)URL.revokeObjectURL(bu);
-  bu=URL.createObjectURL(new Blob([d],{type:'image/jpeg'}));
-  img.src=bu;lf=Date.now();fc++;
+  lf=Date.now();fc++;
   if(stat!=='live')setStatus('live');
+  // 串行链：createImageBitmap 异步完成顺序不保证，必须按帧序排队绘制，否则画面会回跳
+  dfChain=dfChain.then(function(){return drawFrame(d);}).catch(function(){});
 }
 function findM(a,m,f){for(var i=f;i<a.length-1;i++)if(a[i]===0xFF&&a[i+1]===m)return i;return -1;}
+// 帧解析位置记忆：SOI 已找到时不再重扫，EOI 从上次末尾续扫（标记可能跨网络分块）
+var soiCached=-1,eoiFrom=-1;
 async function startStream(){
   if(streamActive)return;streamActive=true;
   var gen=++streamGen;
@@ -197,14 +224,19 @@ async function startStream(){
       var c=rd.value,nb=new Uint8Array(buf.length+c.length);
       nb.set(buf);nb.set(c,buf.length);buf=nb;
       for(;;){
-        var soi=findM(buf,0xD8,0);
-        if(soi<0){buf=new Uint8Array(0);break;}
-        var eoi=findM(buf,0xD9,soi+2);
-        if(eoi<0){if(soi>0)buf=buf.slice(soi);break;}
+        var soi=soiCached>=0?soiCached:findM(buf,0xD8,0);
+        if(soi<0){buf=new Uint8Array(0);soiCached=-1;eoiFrom=-1;break;}
+        var eoi=findM(buf,0xD9,Math.max(soi+2,eoiFrom));
+        if(eoi<0){
+          if(soi>0)buf=buf.slice(soi);
+          soiCached=0;eoiFrom=buf.length-1;  // -1：FF D9 标记可能跨分块，末尾重叠加一
+          break;
+        }
         displayFrame(buf.slice(soi,eoi+2));
         buf=buf.slice(eoi+2);
+        soiCached=-1;eoiFrom=-1;
       }
-      if(buf.length>500000)buf=buf.slice(-100000);
+      if(buf.length>500000){buf=buf.slice(-100000);soiCached=-1;eoiFrom=-1;}
     }
   }catch(e){}
   if(gen===streamGen){
@@ -242,9 +274,9 @@ setInterval(function(){
 function applyTransform(){
   wrapper.style.transform='translate('+panX+'px,'+panY+'px) rotate('+rot+'deg) scale('+zoom+')';
   if(rot===90||rot===270){
-    img.style.maxWidth=container.clientHeight+'px';
-    img.style.maxHeight=container.clientWidth+'px';
-  }else{img.style.maxWidth='100%';img.style.maxHeight='100%';}
+    dispEl.style.maxWidth=container.clientHeight+'px';
+    dispEl.style.maxHeight=container.clientWidth+'px';
+  }else{dispEl.style.maxWidth='100%';dispEl.style.maxHeight='100%';}
 }
 function doRotate(){
   wrapper.style.transition='transform .3s ease';
