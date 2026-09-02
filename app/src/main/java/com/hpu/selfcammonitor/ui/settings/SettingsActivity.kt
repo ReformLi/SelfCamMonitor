@@ -36,6 +36,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var seekBarSensitivity: SeekBar
     private lateinit var tvSensitivityValue: TextView
     private lateinit var switchBoot: SwitchMaterial
+    private lateinit var switchMotionAlert: SwitchMaterial
     private lateinit var etAlertUrl: EditText
     private lateinit var etAlertQuiet: EditText
     private lateinit var etStartTime: EditText
@@ -67,6 +68,7 @@ class SettingsActivity : AppCompatActivity() {
         seekBarSensitivity = findViewById(R.id.seekBarSensitivity)
         tvSensitivityValue = findViewById(R.id.tvSensitivityValue)
         switchBoot = findViewById(R.id.switchBootStart)
+        switchMotionAlert = findViewById(R.id.switchMotionAlert)
         etAlertUrl = findViewById(R.id.etAlertUrl)
         etAlertQuiet = findViewById(R.id.etAlertQuiet)
         etStartTime = findViewById(R.id.etStartTime)
@@ -136,6 +138,11 @@ class SettingsActivity : AppCompatActivity() {
         tvSensitivityValue.text = seekBarSensitivity.progress.toString()
 
         switchBoot.isChecked = prefs.getBoolean("boot_start", false)
+        // URL 为空时强制回退为关：防止历史上被打开、但 URL 后来被清空的配置残留
+        if (prefs.getBoolean("motion_alert_enabled", false) &&
+            prefs.getString("alert_url", "")?.isNotBlank() == true) {
+            switchMotionAlert.isChecked = true
+        }
         etAlertUrl.setText(prefs.getString("alert_url", ""))
         etAlertQuiet.setText(prefs.getInt("alert_quiet", 30).toString())
         etStartTime.setText(prefs.getString("monitor_start", ""))
@@ -245,6 +252,19 @@ class SettingsActivity : AppCompatActivity() {
         // 监控时间段：点击弹出时间选择器，不允许手动输入
         etStartTime.setOnClickListener { showTimePicker(etStartTime, "选择监控开始时间") }
         etEndTime.setOnClickListener { showTimePicker(etEndTime, "选择监控结束时间") }
+
+        // 运动报警开关：即时保存并热生效；URL 未配置时禁止打开
+        switchMotionAlert.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked && etAlertUrl.text.toString().trim().isBlank()) {
+                switchMotionAlert.isChecked = false  // 回拨会再次进入本监听，走 else 分支不保存
+                Toast.makeText(
+                    this, "请先在下方配置报警接收 URL", Toast.LENGTH_SHORT
+                ).show()
+                return@setOnCheckedChangeListener
+            }
+            prefs.edit().putBoolean("motion_alert_enabled", isChecked).apply()
+            sendReloadBroadcast()
+        }
     }
 
     /**
@@ -315,12 +335,19 @@ class SettingsActivity : AppCompatActivity() {
         val continuousValues = resources.getStringArray(R.array.continuous_duration_values)
         val continuousSec = continuousValues[continuousLabels.indexOf(spinnerContinuousDuration.text.toString()).coerceAtLeast(0)].toInt()
 
+        // 保存时 URL 若被清空，同步关闭运动报警开关（服务端空 URL 本就不发送，这里保持配置自洽）
+        if (etAlertUrl.text.toString().trim().isBlank()) {
+            prefs.edit().putBoolean("motion_alert_enabled", false).apply()
+            switchMotionAlert.isChecked = false
+        }
+
         prefs.edit()
             .putString("resolution", resolution)   // 保存纯字符串
             .putInt("camera_facing", cameraFacing)  // 镜头：0=后置，1=前置
             .putInt("fps", seekBarFps.progress)
             .putInt("sensitivity", seekBarSensitivity.progress)
             .putBoolean("boot_start", switchBoot.isChecked)
+            .putBoolean("motion_alert_enabled", switchMotionAlert.isChecked)
             .putString("alert_url", etAlertUrl.text.toString().trim())
             .putInt("alert_quiet", etAlertQuiet.text.toString().toIntOrNull() ?: 30)
             .putString("monitor_start", etStartTime.text.toString().trim())

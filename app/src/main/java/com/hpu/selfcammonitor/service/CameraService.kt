@@ -72,6 +72,7 @@ class CameraService : LifecycleService() {
 
     // 配置项
     private var mjpegEnabled = true
+    private var motionAlertEnabled = false  // 运动报警开关（与检测参数共用，独立于录像模式）
     private var useFrontCamera = false   // 镜头选择：false=后置，true=前置（启动相机时生效）
     private var actualCameraFacing = 0   // 实际绑定的镜头朝向：0=后置，1=前置（回退场景下与配置可能不同）
     private var actualResolution = "--"  // 实际绑定的推流分辨率（回退策略下可能与设置值不同）
@@ -243,6 +244,8 @@ class CameraService : LifecycleService() {
     private fun loadSettings() {
         val prefs = getSharedPreferences("camera_prefs", MODE_PRIVATE)
         mjpegEnabled = prefs.getBoolean("mjpeg_enabled", true)
+        // 运动报警开关：默认关闭；仅在已配置报警 URL 时服务端才真正发送
+        motionAlertEnabled = prefs.getBoolean("motion_alert_enabled", false)
 
         // HTTP 认证（空白视为未配置，认证关闭）
         streamServer.username = prefs.getString("http_user", null)?.takeIf { it.isNotBlank() }
@@ -334,9 +337,17 @@ class CameraService : LifecycleService() {
     private val configReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val oldMode = recordMode
+            val oldMotionAlert = motionAlertEnabled
             val wasPreviewOnly = (oldMode == MODE_PREVIEW_ONLY)
             loadSettings() // 重新加载所有配置
             val isPreviewOnly = (recordMode == MODE_PREVIEW_ONLY)
+
+            // 报警开关或模式切换后清空检测参考帧：
+            // 长时间未跑检测（如连续模式未开报警）后重新启用，首帧与旧参考帧差分会产生假运动
+            if (oldMotionAlert != motionAlertEnabled) {
+                motionDetector.reset()
+                Log.d(TAG, "运动报警开关切换: $oldMotionAlert -> $motionAlertEnabled")
+            }
 
             if (oldMode != recordMode) {
                 // 模式切换：先无条件停掉所有录像会话（不依赖旧模式判断），
@@ -501,18 +512,28 @@ class CameraService : LifecycleService() {
                         MODE_CONTINUOUS -> {
                             // 连续录像：录像会话因监控时间窗暂停或异常中断时自动恢复
                             maybeResumeContinuousRecording()
+                            // 运动报警（独立开关）：检测管线与运动录像共享同一套参数，
+                            // 检测到运动只报警，不触发录像（本来就在连续录）
+                            if (motionAlertEnabled) {
+                                val motion = motionDetector.detectMotion(imageProxy)
+                                if (motion) {
+                                    Log.d(TAG, "连续录像模式下检测到运动")
+                                    alertManager.sendMotionAlert()
+                                }
+                            }
                         }
                         MODE_MOTION_TRIGGERED -> {
-                            // 运动检测
+                            // 运动检测：触发录像；报警由独立开关控制（URL 已配置时才真正发送）
                             val motion = motionDetector.detectMotion(imageProxy)
                             if (motion) {
                                 Log.d(TAG, "检测到运动")
-                                alertManager.sendMotionAlert()
+                                if (motionAlertEnabled) alertManager.sendMotionAlert()
                                 startClipRecording()  // 启动短视频录制
                             }
                         }
                         MODE_PREVIEW_ONLY -> {
                             // 不录像、不运动检测
+//                            Log.d(TAG, "不录像、不运动检测")
                         }
                     }
                     // MJPEG 推流：只在分析线程做 NV21 拷贝，随后覆盖式投递到编码槽位。

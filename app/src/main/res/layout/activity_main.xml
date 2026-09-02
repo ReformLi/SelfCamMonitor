@@ -253,7 +253,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="检测到画面变化时录像并报警"
+                                android:text="检测到画面变化时录像"
                                 android:textSize="12sp"
                                 android:textColor="@color/text_secondary" />
                         </LinearLayout>
