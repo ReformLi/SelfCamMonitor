@@ -63,7 +63,11 @@ class MotionDetector {
 
         // 计算差异比例（按无符号字节求差，避免有符号字节在 128 边界处的差值错误）
         var diffCount = 0
-        val threshold = ((100 - sensitivity) * 2.55).toInt().coerceAtLeast(5) // 将灵敏度映射为差异阈值
+        // 灵敏度→像素亮度差阈值：数值越小越敏感（与设置页说明一致）。
+        // 0=阈值5(最敏感) 100=阈值255(几乎只对黑白翻转反应)。
+        // 注意：旧实现 (100 - sensitivity) * 2.55 方向反了——UI 语义"越小越敏感"下
+        // 灵敏度30阈值高达178，正常人体运动不触发，导致报警链路整体失效
+        val threshold = (sensitivity * 2.55).toInt().coerceIn(5, 255)
         for (i in luma.indices) {
             val diff = abs((luma[i].toInt() and 0xFF) - (prev[i].toInt() and 0xFF))
             if (diff > threshold) {
