@@ -744,6 +744,24 @@ class CameraService : LifecycleService() {
         return Range(fps, fps)
     }
 
+    // ---- 预览页 HUD 只读状态（同进程 UI 读取，无锁快照语义） ----
+
+    /** 当前是否正在写录像文件（连续分段或运动短片） */
+    val hudRecording: Boolean
+        get() = isRecording || continuousRecording
+
+    /** 录像模式中文标签 */
+    val hudModeLabel: String
+        get() = when (recordMode) {
+            MODE_CONTINUOUS -> "连续录像"
+            MODE_MOTION_TRIGGERED -> "运动触发"
+            else -> "仅预览"
+        }
+
+    /** 当前是否处于监控时间窗内 */
+    val hudWithinWindow: Boolean
+        get() = isWithinTimeWindow()
+
     private fun isWithinTimeWindow(): Boolean {
         // 空白值（null 或空字符串）视为无限制，全天监控
         val start = monitorStart?.takeIf { it.isNotBlank() } ?: return true

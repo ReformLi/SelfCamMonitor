@@ -11,16 +11,103 @@
         android:scaleType="fitCenter"
         android:contentDescription="监控画面" />
 
+    <!-- 顶部 HUD 信息栏：REC 状态 / 模式 / fps / 存储 / 时间码 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:orientation="vertical"
+        android:background="#66000000"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/tvRec"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="● REC"
+                android:textColor="#FF5252"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tvMode"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="连续录像"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tvClock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="00:00:00"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvFps"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="-- fps"
+                android:textColor="#B3FFFFFF"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/tvStorage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:text="剩余 --"
+                android:textColor="#B3FFFFFF"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 时间窗提示横幅 -->
     <TextView
-        android:id="@+id/tvPreviewHint"
+        android:id="@+id/tvWindowBanner"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="64dp"
         android:paddingHorizontal="16dp"
-        android:paddingVertical="8dp"
-        android:background="#88000000"
-        android:text="连接中…"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp" />
+        android:paddingVertical="6dp"
+        android:background="#88FFB300"
+        android:text="当前为非监控时段，画面可能暂停"
+        android:textColor="#000000"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+    <!-- 底部装饰文字：纯展示 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="24dp"
+        android:text="预览画面"
+        android:textColor="#B3FFFFFF"
+        android:textSize="22sp" />
 </FrameLayout>

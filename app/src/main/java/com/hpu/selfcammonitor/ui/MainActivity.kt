@@ -135,16 +135,8 @@ class MainActivity : AppCompatActivity() {
         btnPreview = findViewById(R.id.btnPreview)
 
         // 本机查看监控画面：进程内共享编码帧，不走 HTTP/认证
+        // 按钮仅在"服务运行 + MJPEG 推流开启"时可见（见 updateUI / switchMjpeg 监听），无需点击校验
         btnPreview.setOnClickListener {
-            if (!CameraService.isRunning) {
-                Toast.makeText(this, "监控未运行", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            // 简单版：预览依赖编码循环产帧，MJPEG 推流关闭时提示开启
-            if (!prefs.getBoolean("mjpeg_enabled", true)) {
-                Toast.makeText(this, "本地预览依赖 MJPEG 推流，请先在功能控制中开启", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
             startActivity(Intent(this, PreviewActivity::class.java))
         }
 
@@ -176,6 +168,9 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent("com.hpu.selfcammonitor.RELOAD_CONFIG")
             intent.setPackage(packageName)  // 显式广播：防系统过滤隐式广播
             sendBroadcast(intent)
+            // 查看画面按钮依赖推流产帧：开关切换时即时联动可见性
+            btnPreview.visibility =
+                if (isChecked && CameraService.isRunning) View.VISIBLE else View.GONE
         }
 
         findViewById<ImageButton>(R.id.btnSettings).setOnClickListener {
@@ -362,8 +357,9 @@ class MainActivity : AppCompatActivity() {
         btnStart.isEnabled = !running
         btnStop.isEnabled = running
 
-        // 查看画面按钮：仅服务运行时显示（状态文字右侧）
-        btnPreview.visibility = if (running) View.VISIBLE else View.GONE
+        // 查看画面按钮：仅服务运行且 MJPEG 推流开启时显示（预览依赖编码循环产帧）
+        btnPreview.visibility =
+            if (running && prefs.getBoolean("mjpeg_enabled", true)) View.VISIBLE else View.GONE
 
         // 设置按钮背景色和文字颜色
         updateButtonAppearance(running)
