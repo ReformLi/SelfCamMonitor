@@ -60,14 +60,39 @@
                     android:textColor="@color/text_primary"
                     android:layout_marginBottom="12dp" />
 
-                <TextView
-                    android:id="@+id/tvStatus"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="服务已停止"
-                    android:textColor="@color/status_stopped"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/tvStatus"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="服务已停止"
+                        android:textColor="@color/status_stopped"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <!-- 本机查看监控画面：仅服务运行时显示。
+                         inset 清零 + 紧凑内边距：高度贴合左侧状态文字，避免撑高状态行 -->
+                    <Button
+                        android:id="@+id/btnPreview"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="查看画面"
+                        android:textSize="12sp"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="2dp"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:visibility="gone" />
+                </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"

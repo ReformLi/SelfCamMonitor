@@ -13,6 +13,7 @@ import android.os.PowerManager
 import android.os.StatFs
 import android.provider.Settings
 import android.text.Spannable
+import android.view.View
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
 import android.widget.Button
@@ -44,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStorage: TextView
     private lateinit var tvFps: TextView
     private lateinit var btnViewRecordings: Button
+    private lateinit var btnPreview: Button
 
     private lateinit var switchContinuous: SwitchCompat
 
@@ -130,6 +132,21 @@ class MainActivity : AppCompatActivity() {
         tvStorage = findViewById(R.id.tvStorage)
         tvFps = findViewById(R.id.tvFps)
         btnViewRecordings = findViewById(R.id.btnViewRecordings)
+        btnPreview = findViewById(R.id.btnPreview)
+
+        // 本机查看监控画面：进程内共享编码帧，不走 HTTP/认证
+        btnPreview.setOnClickListener {
+            if (!CameraService.isRunning) {
+                Toast.makeText(this, "监控未运行", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            // 简单版：预览依赖编码循环产帧，MJPEG 推流关闭时提示开启
+            if (!prefs.getBoolean("mjpeg_enabled", true)) {
+                Toast.makeText(this, "本地预览依赖 MJPEG 推流，请先在功能控制中开启", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            startActivity(Intent(this, PreviewActivity::class.java))
+        }
 
         switchContinuous = findViewById(R.id.switch_continuous)
         switchMotion = findViewById(R.id.switch_motion)
@@ -344,6 +361,9 @@ class MainActivity : AppCompatActivity() {
         // 按钮状态控制：运行时启动按钮置灰，停止按钮可用；停止时相反
         btnStart.isEnabled = !running
         btnStop.isEnabled = running
+
+        // 查看画面按钮：仅服务运行时显示（状态文字右侧）
+        btnPreview.visibility = if (running) View.VISIBLE else View.GONE
 
         // 设置按钮背景色和文字颜色
         updateButtonAppearance(running)

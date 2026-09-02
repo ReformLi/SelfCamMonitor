@@ -37,6 +37,9 @@
             android:name=".ui.settings.SettingsActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.PreviewActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.recordings.RecordingsActivity"
             android:exported="false" /> <!-- 允许 HTTP -->
         <activity android:name=".ui.video.VideoListActivity" />

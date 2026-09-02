@@ -164,6 +164,11 @@ class CameraService : LifecycleService() {
         var isRunning: Boolean = false
             private set
 
+        // 服务实例引用：同进程界面（本地预览页）注册帧监听用，随服务生命周期维护
+        @Volatile
+        var instance: CameraService? = null
+            private set
+
         // CameraService.kt  companion object 内添加
         const val MODE_CONTINUOUS = 0      // 连续录像
         const val MODE_MOTION_TRIGGERED = 1 // 运动触发录像
@@ -193,6 +198,7 @@ class CameraService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         cameraExecutor = Executors.newSingleThreadExecutor()
         // 单线程编码循环：多线程并发编码无法保证完成顺序，会导致客户端帧乱序（画面回跳）；
         // 配合 pendingEncode 槽位，单线程 + 覆盖式投递天然保序且自带丢帧
@@ -375,9 +381,17 @@ class CameraService : LifecycleService() {
         return null
     }
 
+    // 本地预览帧监听透传（监控手机本机查看画面，进程内共享已编码帧）
+    fun addPreviewListener(listener: MJPEGStreamer.FrameListener) =
+        mjpegStreamer.addFrameListener(listener)
+
+    fun removePreviewListener(listener: MJPEGStreamer.FrameListener) =
+        mjpegStreamer.removeFrameListener(listener)
+
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        instance = null
         sendStatusBroadcast(false)  // 通知主界面更新状态（原实现停止时无广播，界面一直显示"运行中"）
         stopContinuousRecording()
         stopMotionRecording()

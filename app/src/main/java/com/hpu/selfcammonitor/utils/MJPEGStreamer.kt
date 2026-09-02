@@ -14,6 +14,15 @@ import java.util.concurrent.atomic.AtomicReference
 
 class MJPEGStreamer {
 
+    /**
+     * 本地预览帧监听：进程内直接共享已编码的 JPEG 帧（监控手机本机预览用，不走 HTTP、不做认证）。
+     * 帧已含旋转，接收方解码即得正向画面
+     */
+    interface FrameListener {
+        fun onFrame(jpeg: ByteArray)
+    }
+
+
     companion object {
         const val BOUNDARY = "MYBOUNDARY"
         private const val TAG = "MJPEGStreamer"
@@ -175,6 +184,13 @@ class MJPEGStreamer {
     // 最新一帧 JPEG（供 /snapshot 端点使用）
     private val latestJpeg = AtomicReference<ByteArray?>(null)
 
+    // 本地预览监听集合（并发安全：编码线程通知，UI 线程增删）
+    private val frameListeners = ConcurrentHashMap.newKeySet<FrameListener>()
+
+    fun addFrameListener(listener: FrameListener) { frameListeners.add(listener) }
+
+    fun removeFrameListener(listener: FrameListener) { frameListeners.remove(listener) }
+
     // 最近一次推帧时间戳（供 /status 端点判断画面是否活跃）
     @Volatile
     private var lastFrameTime: Long = 0
@@ -256,6 +272,11 @@ class MJPEGStreamer {
         // 存储最新帧，供 /snapshot 端点使用（即使没有 MJPEG 客户端也存）
         latestJpeg.set(jpegData)
         lastFrameTime = System.currentTimeMillis()
+
+        // 通知本地预览监听（原始 JPEG，无 multipart 头）；须在无网络客户端的提前返回之前
+        if (frameListeners.isNotEmpty()) {
+            frameListeners.forEach { it.onFrame(jpegData) }
+        }
 
         if (clients.isEmpty()) return
 
