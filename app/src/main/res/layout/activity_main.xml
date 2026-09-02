@@ -76,21 +76,23 @@
                         android:textSize="18sp"
                         android:textStyle="bold" />
 
-                    <!-- 本机查看监控画面：仅服务运行时显示。
-                         inset 清零 + 紧凑内边距：高度贴合左侧状态文字，避免撑高状态行 -->
+                    <!-- 本机预览监控画面：仅服务运行时显示。
+                         应用主题色描边小胶囊按钮：与状态文字同高、视觉轻量不突兀 -->
                     <Button
                         android:id="@+id/btnPreview"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="查看画面"
+                        android:text="预览画面"
                         android:textSize="12sp"
+                        android:textColor="@color/primary"
                         android:minWidth="0dp"
                         android:minHeight="0dp"
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="2dp"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="3dp"
+                        android:stateListAnimator="@null"
+                        android:background="@drawable/bg_preview_button"
                         android:visibility="gone" />
                 </LinearLayout>
 
