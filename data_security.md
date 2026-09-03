@@ -65,6 +65,7 @@
 ### 好消息
 
 * 非 Root 的普通手机，其他 App 无法访问你的 SharedPreferences，因为它是 `MODE_PRIVATE`
+* 已配置 `backup_rules.xml` / `data_extraction_rules.xml` **排除 `camera_prefs.xml`**：HTTP 认证密码、报警 URL 等敏感配置**不会随 Android 云备份（Auto Backup）或设备迁移上传**，保持完全本地
 
 * * *
 
