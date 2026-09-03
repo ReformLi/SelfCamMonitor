@@ -487,19 +487,24 @@ class VideoListActivity : AppCompatActivity() {
     }
 
     private fun copyFileToDocument(sourceFile: File, rootDocument: DocumentFile?): Boolean {
+        // createFile 会立即在用户选定的外部目录落下一个 0 字节文件。
+        // 该目录不在 App 的 Recordings 扫描范围内，一旦留下失败残骸 App 再也看不到、也无从清理
+        // （只能用户自己开文件管理器删），因此每个失败分支都必须回滚目标文件。
+        val destFile = rootDocument?.createFile("video/mp4", sourceFile.name) ?: return false
         return try {
-            val destFile = rootDocument?.createFile("video/mp4", sourceFile.name) ?: return false
-            val sourceStream = FileInputStream(sourceFile)
-            val destStream = contentResolver.openOutputStream(destFile.uri) ?: return false
-            val buffer = ByteArray(8192)
-            var bytesRead: Int
-            while (sourceStream.read(buffer).also { bytesRead = it } != -1) {
-                destStream.write(buffer, 0, bytesRead)
+            val destStream = contentResolver.openOutputStream(destFile.uri)
+            if (destStream == null) {
+                // 目标流打不开（URI 权限失效、目标卷不可写）：删掉刚创建的空文件
+                try { destFile.delete() } catch (_: Exception) {}
+                false
+            } else {
+                // use 嵌套：源流与目标流在异常路径上也必定及时关闭，不再等 GC
+                FileInputStream(sourceFile).use { src -> destStream.use { dst -> src.copyTo(dst, 8192) } }
+                true
             }
-            sourceStream.close()
-            destStream.close()
-            true
         } catch (e: Exception) {
+            // 复制中途失败（目标空间不足、进程被回收等）：删除半截文件，不留残骸
+            try { destFile.delete() } catch (_: Exception) {}
             false
         }
     }
